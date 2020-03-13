@@ -1,5 +1,5 @@
 /*
- * Copyright 2014–2020 SlamData Inc.
+ * Copyright 2020 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package slamdata
+package precog
 
 import sbt._, Keys._
 import sbt.Def.Initialize
@@ -42,7 +42,7 @@ import java.lang.{String, System}
 import java.nio.file.attribute.PosixFilePermission, PosixFilePermission.OWNER_EXECUTE
 import java.nio.file.Files
 
-abstract class SbtSlamDataBase extends AutoPlugin {
+abstract class SbtPrecogBase extends AutoPlugin {
   private[this] val AutobumpPrTitle = "Applied dependency updates"
 
   private var foundLocalEvictions: Set[(String, String)] = Set()
@@ -55,7 +55,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
 
   override def trigger = allRequirements
 
-  class autoImport extends SbtSlamDataKeys {
+  class autoImport extends SbtPrecogKeys {
     val VersionsPath = ".versions.json"
     val BothScopes = "test->test;compile->compile"
 
@@ -124,7 +124,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
         "-Xfuture")
 
     val headerLicenseSettings = Seq(
-      headerLicense := Some(HeaderLicense.ALv2("2014–2020", "SlamData Inc.")),
+      headerLicense := Some(HeaderLicense.ALv2("2020", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       checkHeaders := {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
@@ -196,10 +196,10 @@ abstract class SbtSlamDataBase extends AutoPlugin {
 
       developers := List(
         Developer(
-          id = "slamdata",
-          name = "SlamData Inc.",
-          email = "contact@slamdata.com",
-          url = new URL("http://slamdata.com")
+          id = "precog",
+          name = "Precog Inc.",
+          email = "contact@precog.com",
+          url = new URL("http://precog.com")
         )))
 
     implicit final class ProjectSyntax(val self: Project) {
@@ -251,10 +251,10 @@ abstract class SbtSlamDataBase extends AutoPlugin {
         Seq()
     } ++
     Seq(
-      organization := "com.slamdata",
+      organization := "com.precog",
 
-      organizationName := "SlamData Inc.",
-      organizationHomepage := Some(url("http://slamdata.com")),
+      organizationName := "Precog",
+      organizationHomepage := Some(url("https://precog.com")),
 
       resolvers := Seq(
         Resolver.sonatypeRepo("releases"),
@@ -266,7 +266,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
         }
       },
 
-      trickleDbURI := "https://github.com/slamdata/build-metadata.git",
+      trickleDbURI := "https://github.com/precog/build-metadata.git",
       trickleRepositoryName := Project.normalizeModuleID(uri(trickleRepositoryURI.value).getPath.substring(1)),
       trickleRepositoryURI := scmInfo.value.map(_.browseUrl).orElse(homepage.value).getOrElse {
         sys.error("Set 'ThisBuild / trickleRepositoryURI' to the github page of this project")
@@ -402,7 +402,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
     val ewo = (evictionWarningOptions in unsafeEvictionsCheck).value
     val report = (updateFull tag(Tags.Update, Tags.Network)).value
     val log = streams.value.log
-    slamdata.UnsafeEvictions.check(currentProject, module, isFatal, conf, ewo, report, log)
+    precog.UnsafeEvictions.check(currentProject, module, isFatal, conf, ewo, report, log)
   }
 
   private def isWindows(): Boolean = System.getProperty("os.name").startsWith("Windows")
@@ -440,7 +440,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
       },
 
       unsafeEvictionsFatal := githubIsWorkflowBuild.value,
-      unsafeEvictionsConf += (UnsafeEvictions.IsOrg("com.slamdata") -> VersionNumber.SecondSegment),
+      unsafeEvictionsConf += (UnsafeEvictions.IsOrg("com.precog") -> VersionNumber.SecondSegment),
       update := {
         unsafeEvictionsCheck.value
         update.value
@@ -448,7 +448,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
 
       resolvers ++= {
         if (!publishAsOSSProject.value)
-          Seq(Resolver.bintrayRepo("slamdata-inc", "maven-private"))
+          Seq(Resolver.bintrayRepo("precog-inc", "maven-private"))
         else
           Seq.empty
       },
@@ -475,7 +475,7 @@ abstract class SbtSlamDataBase extends AutoPlugin {
             s"${uri.getScheme}://${sys.env("GITHUB_ACTOR")}:${sys.env("GITHUB_TOKEN")}@${uri.getHost}${uri.getPath}"
           }
 
-          val dir = Files.createTempDirectory("sbt-slamdata")
+          val dir = Files.createTempDirectory("sbt-precog")
           val dirFile = dir.toFile
 
           if (runWithLogger(s"git clone --depth 1 $authenticated ${dirFile.getPath}", log, merge = true) != 0) {
@@ -528,10 +528,10 @@ abstract class SbtSlamDataBase extends AutoPlugin {
               log,
               true,
               Some(dirFile),
-              "GIT_AUTHOR_NAME" -> "SlamData Bot",
-              "GIT_AUTHOR_EMAIL" -> "bot@slamdata.com",
-              "GIT_COMMITTER_NAME" -> "SlamData Bot",
-              "GIT_COMMITTER_EMAIL" -> "bot@slamdata.com")
+              "GIT_AUTHOR_NAME" -> "Precog Bot",
+              "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
+              "GIT_COMMITTER_NAME" -> "Precog Bot",
+              "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
 
             if (commitECode != 0) {
               log.warn("git-commit exited with error")

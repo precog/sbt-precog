@@ -3,7 +3,7 @@
 set -euo pipefail # STRICT MODE
 IFS=$'\n\t'        # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 
-git clone --depth 1 https://$GITHUB_TOKEN@github.com/slamdata/devtools.git $CLONE_DIR
+git clone --depth 1 https://$GITHUB_TOKEN@github.com/precog/devtools.git $CLONE_DIR
 for t in "$(scripts/listLabels | grep 'version: revision')"; do
   if ! $CLONE_DIR/bin/sdmerge $REPO_SLUG $PR_NUMBER; then
     # if we fail to sdmerge, we assume it's a merge conflict and just close the PR
