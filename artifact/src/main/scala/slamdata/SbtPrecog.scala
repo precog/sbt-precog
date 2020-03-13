@@ -1,5 +1,5 @@
 /*
- * Copyright 2014–2020 SlamData Inc.
+ * Copyright 2020 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package slamdata
+package precog
 
 import sbt._, Keys._
 
@@ -22,7 +22,7 @@ import sbtghpackages.GitHubPackagesPlugin
 
 import scala.collection.immutable.Seq
 
-object SbtSlamData extends SbtSlamDataBase {
+object SbtPrecog extends SbtPrecogBase {
 
   override def requires = super.requires && GitHubPackagesPlugin
 
@@ -42,19 +42,11 @@ object SbtSlamData extends SbtSlamDataBase {
     super.projectSettings ++
     addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; +publish") ++
     Seq(
-      githubOwner := "slamdata",
-      githubRepository := { if (publishAsOSSProject.value) "public" else "private" },
+      githubOwner := "precog",
       githubTokenSource := TokenSource.Environment("GITHUB_TOKEN") || githubTokenSource.value,
 
-      resolvers += Resolver.githubPackages("slamdata", "public"),
-      resolvers += Resolver.githubPackages("slamdata", "tectonic"),   // don't ask...
-
-      resolvers ++= {
-        if (!publishAsOSSProject.value)
-          Seq(Resolver.githubPackages("slamdata", "private"))
-        else
-          Seq.empty
-      })
+      resolvers += Resolver.githubPackages("precog"),
+      resolvers += Resolver.githubPackages("slamdata"))   // TODO remove
 
   protected val autoImporter = autoImport
 }

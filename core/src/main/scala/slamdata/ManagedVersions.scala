@@ -1,5 +1,5 @@
 /*
- * Copyright 2014–2020 SlamData Inc.
+ * Copyright 2020 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package slamdata
+package precog
 
 import sbt.util.FileBasedStore
 import sbt.internal.util.codec.JValueFormats

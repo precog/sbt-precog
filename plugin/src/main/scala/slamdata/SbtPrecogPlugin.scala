@@ -1,5 +1,5 @@
 /*
- * Copyright 2014–2020 SlamData Inc.
+ * Copyright 2020 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package slamdata
+package precog
 
 import sbt._, Keys._
 
@@ -25,7 +25,7 @@ import sbtghactions.GitHubActionsPlugin, GitHubActionsPlugin.autoImport._
 import scala.{sys, Some}
 import scala.collection.immutable.Seq
 
-object SbtSlamDataPlugin extends SbtSlamDataBase {
+object SbtPrecogPlugin extends SbtPrecogBase {
 
   override def requires = super.requires && BintrayPlugin
 
@@ -48,7 +48,7 @@ object SbtSlamDataPlugin extends SbtSlamDataBase {
     Seq(
       sbtPlugin := true,
 
-      bintrayOrganization := Some("slamdata-inc"),
+      bintrayOrganization := Some("precog-inc"),
       bintrayRepository := "sbt-plugins",
       bintrayReleaseOnPublish := false,
 
