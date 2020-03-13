@@ -48,7 +48,7 @@ object SbtPrecogPlugin extends SbtPrecogBase {
     Seq(
       sbtPlugin := true,
 
-      bintrayOrganization := Some("precog-inc"),
+      bintrayOrganization := Some("precog-bot"),
       bintrayRepository := "sbt-plugins",
       bintrayReleaseOnPublish := false,
 
