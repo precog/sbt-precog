@@ -35,7 +35,6 @@ object SbtPrecog extends SbtPrecogBase {
       skip in publish := true)
   }
 
-  import autoImport._
   import GitHubPackagesPlugin.autoImport._
 
   override def projectSettings =
