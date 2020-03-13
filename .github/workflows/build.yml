@@ -11,7 +11,7 @@ env:
   JDK: 1.8
   REPO_SLUG: ${{ github.repository }}
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
-  GITHUB_ACTOR: slamdata-bot
+  GITHUB_ACTOR: precog-bot
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
         with:
           java-version: ${{ env.JDK }}
       - name: Setup Git Actor
-        run: git config github.actor slamdata-bot
+        run: git config github.actor precog-bot
       - name: Compile and test
         run: $SBT ++${{ matrix.scala }} ci
       - name: Upload working directory
@@ -52,7 +52,7 @@ jobs:
         with:
           name: working-dir
       - name: Setup Git Actor
-        run: git config github.actor slamdata-bot
+        run: git config github.actor precog-bot
       - name: Set up JDK ${{ env.JDK }}
         uses: actions/setup-java@v1
         with:
@@ -72,4 +72,4 @@ jobs:
       - name: Common setup
         run: ./scripts/commonSetup
       - name: Publish and Tag
-        run: ./scripts/publishAndTag 'slamdata/sbt-slamdata'
+        run: ./scripts/publishAndTag 'precog/sbt-precog'
