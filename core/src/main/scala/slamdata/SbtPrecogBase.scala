@@ -16,31 +16,33 @@
 
 package precog
 
-import sbt._, Keys._
+import sbt._
+import Keys._
 import sbt.Def.Initialize
 import sbt.complete.DefaultParsers.fileParser
-
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
-
 import _root_.io.crashbox.gpg.SbtGpg
-
-import sbtghactions.GitHubActionsPlugin, GitHubActionsPlugin.autoImport._
-
+import sbtghactions.GitHubActionsPlugin
+import GitHubActionsPlugin.autoImport._
 import org.yaml.snakeyaml.Yaml
 
-import sbttrickle.TricklePlugin, TricklePlugin.autoImport._
+import sbttrickle.TricklePlugin
+import TricklePlugin.autoImport._
 import sbttrickle.metadata.{ModuleUpdateData, OutdatedRepository}
 
-import scala.{sys, Boolean, None, Some, StringContext}
-import scala.collection.immutable.{Set, Seq}
+import scala.{Boolean, None, Some, StringContext, sys}
+import scala.collection.immutable.{Seq, Set}
 import scala.collection.JavaConverters._
 import scala.sys.process._
-
 import java.io.File
 import java.lang.{String, System}
-import java.nio.file.attribute.PosixFilePermission, PosixFilePermission.OWNER_EXECUTE
+import java.nio.file.attribute.PosixFilePermission
+import PosixFilePermission.OWNER_EXECUTE
 import java.nio.file.Files
+
+import github4s.GithubResponses.GHResponse
+import github4s.domain.{Label, PullRequest}
 
 abstract class SbtPrecogBase extends AutoPlugin {
   private[this] val AutobumpPrTitle = "Applied dependency updates"
@@ -377,7 +379,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         }
       },
 
-      // TODO make this suck less
+      // TODO make this suck less -- use labels
       trickleGithubIsAutobumpPullRequest := { pr =>
         pr.title == AutobumpPrTitle &&
           pr.base.exists(_.ref == "master") &&
@@ -389,6 +391,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     Process(command, workingDir) ! plogger
   }
 
+  // TODO: option to echo commands
   private def runWithLoggerSeq(command: Seq[String], log: Logger, merge: Boolean, workingDir: Option[File], env: (String, String)*): Int = {
     val plogger = ProcessLogger(log.info(_), if (merge) log.info(_) else log.error(_))
     Process(command, workingDir, env: _*) ! plogger
@@ -453,6 +456,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
           Seq.empty
       },
 
+      // TODO: self-check, to run on PRs
+      // TODO: dry mode on not-a-build
+      // TODO: cluster datasources/destinations
+      // TODO: set trickleGitCommitMessage
+      // TODO: create PR must: Check for existence, create draft, check again, publish PR
       trickleCreatePullRequest := {
         val prior = trickleCreatePullRequest.value
         val log = sLog.value
@@ -486,6 +494,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
           if (runWithLogger(s"git checkout -b $branchName", log, merge = true, workingDir = Some(dirFile)) != 0) {
             sys.error("git-checkout exited with error")
           }
+
+          // TODO: the update logic should be run by the target repo
 
           val managed = ManagedVersions(dir.resolve(VersionsPath))
           var isRevision = true
@@ -528,7 +538,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
               log,
               true,
               Some(dirFile),
-              "GIT_AUTHOR_NAME" -> "Precog Bot",
+              "GIT_AUTHOR_NAME" -> s"Precog Bot (${trickleRepositoryName.value})",
               "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
               "GIT_COMMITTER_NAME" -> "Precog Bot",
               "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
@@ -544,17 +554,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
               val (owner, repoSlug) = repo.ownerAndRepository.getOrElse(sys.error(s"invalid url ${repo.url}"))
 
-              val createPrF = Github[IO](sys.env.get("GITHUB_TOKEN"))
+              val createPrF: IO[GHResponse[PullRequest]] = Github[IO](sys.env.get("GITHUB_TOKEN"))
                 .pullRequests
                 .createPullRequest(
                   owner,
                   repoSlug,
-                  NewPullRequestData(AutobumpPrTitle, "This PR brought to you by sbt-trickle. Please do come again!"),   // TODO
+                  NewPullRequestData(AutobumpPrTitle, s"This PR brought to you by sbt-trickle via ${trickleRepositoryName.value}. Please do come again!"),   // TODO
                   branchName,
                   "master",
                   Some(true))
 
-              def assignLabelList(pr: Int) = Github[IO](sys.env.get("GITHUB_TOKEN"))
+              def assignLabelList(pr: Int): IO[GHResponse[List[Label]]] = Github[IO](sys.env.get("GITHUB_TOKEN"))
                 .issues
                 .addLabels(owner, repoSlug, pr, List(s"version: $change"))
 
