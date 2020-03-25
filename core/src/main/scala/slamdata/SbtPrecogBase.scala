@@ -216,12 +216,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
 
-      githubWorkflowBuildPreamble ++= {
+      /*githubWorkflowBuildPreamble ++= {
         if (publishAsOSSProject.value)
           Seq()
         else
           Seq(WorkflowStep.Sbt(List("transferCommonResources", "exportSecretsForActions")))
-      },
+      },*/
 
       githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
 
@@ -285,27 +285,28 @@ abstract class SbtPrecogBase extends AutoPlugin {
   protected val autoImporter: autoImport
   import autoImporter._
 
-  override def globalSettings = Seq(
-    concurrentRestrictions in Global := {
-      val oldValue = (concurrentRestrictions in Global).value
-      val maxTasks = 2
-      if (githubIsWorkflowBuild.value)
-      // Recreate the default rules with the task limit hard-coded:
-        Seq(Tags.limitAll(maxTasks), Tags.limit(Tags.ForkedTestGroup, 1))
-      else
-        oldValue
-    },
+  override def globalSettings =
+    githubActionsSettings ++
+    Seq(
+      concurrentRestrictions in Global := {
+        val oldValue = (concurrentRestrictions in Global).value
+        val maxTasks = 2
+        if (githubIsWorkflowBuild.value)
+        // Recreate the default rules with the task limit hard-coded:
+          Seq(Tags.limitAll(maxTasks), Tags.limit(Tags.ForkedTestGroup, 1))
+        else
+          oldValue
+      },
 
-    // Tasks tagged with `ExclusiveTest` should be run exclusively.
-    concurrentRestrictions in Global += Tags.exclusive(ExclusiveTest),
+      // Tasks tagged with `ExclusiveTest` should be run exclusively.
+      concurrentRestrictions in Global += Tags.exclusive(ExclusiveTest),
 
-    // UnsafeEvictions default settings
-    unsafeEvictionsFatal := false,
-    unsafeEvictionsConf := Seq.empty,
-    evictionWarningOptions in unsafeEvictionsCheck := EvictionWarningOptions.full
-      .withWarnEvictionSummary(true)
-      .withInfoAllEvictions(false),
-  )
+      // UnsafeEvictions default settings
+      unsafeEvictionsFatal := false,
+      unsafeEvictionsConf := Seq.empty,
+      evictionWarningOptions in unsafeEvictionsCheck := EvictionWarningOptions.full
+        .withWarnEvictionSummary(true)
+        .withInfoAllEvictions(false))
 
   override def buildSettings =
     addCommandAlias("ci", "; checkHeaders; test") ++

@@ -9,11 +9,15 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: ['*']
+    branches: [master, backport/v*]
   push:
-    branches: ['*']
+    branches: [master, backport/v*]
 
 env:
+  SBT: ./sbt
+  REPO_SLUG: ${{ github.repository }}
+  ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
+  GITHUB_ACTOR: precog-bot
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
@@ -53,10 +57,9 @@ jobs:
           key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
       - name: Check that workflows are up to date
-        run: sbt ++${{ matrix.scala }} githubWorkflowCheck
+        run: $SBT ++${{ matrix.scala }} githubWorkflowCheck
 
-      - name: Build project
-        run: sbt ++${{ matrix.scala }} test
+      - run: $SBT ++${{ matrix.scala }} ci
 
       - name: Upload target directory 'target'
         uses: actions/upload-artifact@v1
@@ -91,7 +94,7 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (contains(github.ref, master))
+    if: github.event_name != 'pull_request' && (contains(github.ref, '*'))
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -150,5 +153,52 @@ jobs:
         with:
           name: target-${{ runner.os }}-project/target
 
-      - name: Publish project
-        run: sbt ++${{ matrix.scala }} +publish
+      - name: Install Ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: 2.6
+
+      - name: Common sbt setup
+        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions transferPublishAndTagResources
+
+      - run: ./scripts/commonSetup
+
+      - name: Publish artifacts and create tag
+        run: scripts/publishAndTag ${{ github.repository }}
+
+  auto-merge:
+    name: Auto Merge
+    needs: [build]
+    if: github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.10]
+        java: [adopt@1.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout current branch (fast)
+        uses: actions/checkout@v2
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v5
+        with:
+          java-version: ${{ matrix.java }}
+
+      - name: Install Ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: 2.6
+
+      - name: Common sbt setup
+        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
+
+      - run: ./scripts/commonSetup
+
+      - name: Export CLONE_DIR
+        run: 'echo ::set-env name=CLONE_DIR::$(mktemp -d /tmp/precog-bump.XXXXXXXX)'
+
+      - name: Export PR_NUMBER
+        run: 'echo ::set-env name=PR_NUMBER::$(echo $GITHUB_REF | cut -d''/'' -f3)'
+
+      - run: ./scripts/checkAndAutoMerge
