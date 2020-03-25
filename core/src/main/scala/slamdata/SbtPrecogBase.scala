@@ -23,7 +23,7 @@ import sbt.complete.DefaultParsers.fileParser
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import _root_.io.crashbox.gpg.SbtGpg
-import sbtghactions.GitHubActionsPlugin
+import sbtghactions.{GenerativeKeys, GitHubActionsPlugin, WorkflowJob, WorkflowStep}, GenerativeKeys._
 import GitHubActionsPlugin.autoImport._
 import org.yaml.snakeyaml.Yaml
 
@@ -203,6 +203,70 @@ abstract class SbtPrecogBase extends AutoPlugin {
           email = "contact@precog.com",
           url = new URL("http://precog.com")
         )))
+
+    lazy val githubActionsSettings = Seq(
+      githubWorkflowSbtCommand := s"$$SBT",
+
+      githubWorkflowEnv := Map(
+        "SBT" -> "./sbt",
+        "REPO_SLUG" -> s"$${{ github.repository }}",
+        "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
+        "GITHUB_ACTOR" -> "precog-bot",
+        "GITHUB_TOKEN" -> s"$${{ secrets.GITHUB_TOKEN }}"),
+
+      githubWorkflowTargetBranches := Seq("master", "backport/v*"),
+
+      githubWorkflowBuildPreamble ++= {
+        if (publishAsOSSProject.value)
+          Seq()
+        else
+          Seq(WorkflowStep.Sbt(List("transferCommonResources", "exportSecretsForActions")))
+      },
+
+      githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
+
+      githubWorkflowPublishPreamble ++= Seq(
+        WorkflowStep.Use(
+          "actions",
+          "setup-ruby",
+          1,
+          name = Some("Install Ruby"),
+          params = Map("ruby-version" -> "2.6")),
+
+        WorkflowStep.Sbt(
+          List("transferCommonResources", "exportSecretsForActions", "transferPublishAndTagResources"),
+          name = Some("Common sbt setup")),
+
+        WorkflowStep.Run(List("./scripts/commonSetup"))),
+
+      githubWorkflowPublish := WorkflowStep.Run(
+        List(s"scripts/publishAndTag $${{ github.repository }}"),
+        name = Some("Publish artifacts and create tag")),
+
+      githubWorkflowPublishBranchPatterns := Seq("*"),   // we already limit things to the branches we want
+
+      githubWorkflowAddedJobs += WorkflowJob(
+        "auto-merge",
+        "Auto Merge",
+        List(
+          WorkflowStep.Checkout,
+          WorkflowStep.SetupScala,
+          WorkflowStep.Use(
+            "actions",
+            "setup-ruby",
+            1,
+            name = Some("Install Ruby"),
+            params = Map("ruby-version" -> "2.6")),
+          WorkflowStep.Sbt(
+            List("transferCommonResources", "exportSecretsForActions"),
+            name = Some("Common sbt setup")),
+          WorkflowStep.Run(List("./scripts/commonSetup")),
+          WorkflowStep.ComputeVar("CLONE_DIR", "mktemp -d /tmp/precog-bump.XXXXXXXX"),
+          WorkflowStep.ComputeVar("PR_NUMBER", s"echo $$GITHUB_REF | cut -d'/' -f3"),
+          WorkflowStep.Run(List("./scripts/checkAndAutoMerge"))),
+        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')"),
+        needs = List("build"),
+        scalas = List(scalaVersion.value)))
 
     implicit final class ProjectSyntax(val self: Project) {
       def evictToLocal(envar: String, subproject: String, test: Boolean = false): Project = {
