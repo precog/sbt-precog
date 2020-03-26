@@ -240,7 +240,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         WorkflowStep.Run(List("./scripts/commonSetup"))),
 
       githubWorkflowPublish := WorkflowStep.Run(
-        List(s"scripts/publishAndTag $${{ github.repository }}"),
+        List(s"./scripts/publishAndTag $${{ github.repository }}"),
         name = Some("Publish artifacts and create tag")),
 
       githubWorkflowPublishBranchPatterns := Seq("*"),   // we already limit things to the branches we want
