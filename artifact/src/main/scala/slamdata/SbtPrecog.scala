@@ -37,6 +37,10 @@ object SbtPrecog extends SbtPrecogBase {
 
   import GitHubPackagesPlugin.autoImport._
 
+  override def globalSettings =
+    super.globalSettings ++
+    Seq(githubWorkflowDependencyPatterns += ".versions.json")
+
   override def projectSettings =
     super.projectSettings ++
     addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; +publish") ++
