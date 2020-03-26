@@ -23,7 +23,7 @@ import sbt.complete.DefaultParsers.fileParser
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import _root_.io.crashbox.gpg.SbtGpg
-import sbtghactions.{BranchPredicate, GenerativeKeys, GitHubActionsPlugin, WorkflowJob, WorkflowStep}, GenerativeKeys._
+import sbtghactions.{GenerativeKeys, GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}, GenerativeKeys._
 import GitHubActionsPlugin.autoImport._
 import org.yaml.snakeyaml.Yaml
 
@@ -244,7 +244,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(s"./scripts/publishAndTag $${{ github.repository }}"),
         name = Some("Publish artifacts and create tag")),
 
-      githubWorkflowPublishTargetBranches += BranchPredicate.StartsWith("backport/v"),
+      githubWorkflowPublishTargetBranches += RefPredicate.StartsWith(Ref.Branch("backport/v")),
 
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",

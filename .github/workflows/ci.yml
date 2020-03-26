@@ -30,11 +30,6 @@ jobs:
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Echo ref
-        run: |
-          echo ${{ github.ref }}
-          exit 1
-
       - name: Checkout current branch (fast)
         uses: actions/checkout@v2
 
@@ -102,7 +97,7 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (github.ref == 'master' || startsWith(github.ref, 'backport/v'))
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/backport/v'))
     strategy:
       matrix:
         os: [ubuntu-latest]
