@@ -61,34 +61,34 @@ jobs:
 
       - run: $SBT ++${{ matrix.scala }} ci
 
-      - name: Upload target directory 'target'
+      - name: Upload target directory 'target' (${{ matrix.scala }})
         uses: actions/upload-artifact@v1
         with:
-          name: target-${{ runner.os }}-target
+          name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}-target
           path: target
 
-      - name: Upload target directory 'plugin/target'
+      - name: Upload target directory 'plugin/target' (${{ matrix.scala }})
         uses: actions/upload-artifact@v1
         with:
-          name: target-${{ runner.os }}-plugin/target
+          name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}-plugin_target
           path: plugin/target
 
-      - name: Upload target directory 'artifact/target'
+      - name: Upload target directory 'artifact/target' (${{ matrix.scala }})
         uses: actions/upload-artifact@v1
         with:
-          name: target-${{ runner.os }}-artifact/target
+          name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}-artifact_target
           path: artifact/target
 
-      - name: Upload target directory 'core/target'
+      - name: Upload target directory 'core/target' (${{ matrix.scala }})
         uses: actions/upload-artifact@v1
         with:
-          name: target-${{ runner.os }}-core/target
+          name: target-${{ matrix.os }}-${{ matrix.scala }}-${{ matrix.java }}-core_target
           path: core/target
 
       - name: Upload target directory 'project/target'
         uses: actions/upload-artifact@v1
         with:
-          name: target-${{ runner.os }}-project/target
+          name: target-${{ matrix.os }}-${{ matrix.java }}-project_target
           path: project/target
 
   publish:
@@ -128,30 +128,30 @@ jobs:
           path: ~/.sbt
           key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-      - name: Download target directory 'target'
+      - name: Download target directory 'target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
-          name: target-${{ runner.os }}-target
+          name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-target
 
-      - name: Download target directory 'plugin/target'
+      - name: Download target directory 'plugin/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
-          name: target-${{ runner.os }}-plugin/target
+          name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-plugin_target
 
-      - name: Download target directory 'artifact/target'
+      - name: Download target directory 'artifact/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
-          name: target-${{ runner.os }}-artifact/target
+          name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-artifact_target
 
-      - name: Download target directory 'core/target'
+      - name: Download target directory 'core/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
-          name: target-${{ runner.os }}-core/target
+          name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-core_target
 
       - name: Download target directory 'project/target'
         uses: actions/download-artifact@v1
         with:
-          name: target-${{ runner.os }}-project/target
+          name: target-${{ matrix.os }}-${{ matrix.java }}-project_target
 
       - name: Install Ruby
         uses: actions/setup-ruby@v1
