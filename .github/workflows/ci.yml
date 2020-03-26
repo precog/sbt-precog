@@ -25,7 +25,7 @@ jobs:
     name: Build and Test
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
         scala: [2.12.10]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
@@ -56,12 +56,13 @@ jobs:
           path: ~/.sbt
           key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}-${{ hashFiles('core/**/*.scala') }}-${{ hashFiles('plugin/**/*.scala') }}
 
+      - name: Recreate the OG coursier cache dir
+        run: mkdir -p ~/.coursier/cache/v1
+
       - name: Check that workflows are up to date
-        shell: bash
         run: $SBT ++${{ matrix.scala }} githubWorkflowCheck
 
-      - shell: bash
-        run: $SBT ++${{ matrix.scala }} ci
+      - run: $SBT ++${{ matrix.scala }} ci
 
       - name: Upload target directory 'target' (${{ matrix.scala }})
         uses: actions/upload-artifact@v1

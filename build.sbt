@@ -24,5 +24,4 @@ lazy val plugin = project.in(file("plugin"))
 ThisBuild / homepage := Some(url("https://github.com/precog/sbt-precog"))
 ThisBuild / scmInfo := Some(ScmInfo(homepage.value.get, "scm:git@github.com:precog/sbt-precog.git"))
 
-Global / githubWorkflowOSes ++= Seq("windows-latest", "macos-latest")
 Global / githubWorkflowDependencyPatterns ++= Seq("core/**/*.scala", "plugin/**/*.scala")
