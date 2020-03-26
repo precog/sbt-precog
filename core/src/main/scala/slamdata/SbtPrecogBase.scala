@@ -23,7 +23,7 @@ import sbt.complete.DefaultParsers.fileParser
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import _root_.io.crashbox.gpg.SbtGpg
-import sbtghactions.{GenerativeKeys, GitHubActionsPlugin, WorkflowJob, WorkflowStep}, GenerativeKeys._
+import sbtghactions.{BranchPredicate, GenerativeKeys, GitHubActionsPlugin, WorkflowJob, WorkflowStep}, GenerativeKeys._
 import GitHubActionsPlugin.autoImport._
 import org.yaml.snakeyaml.Yaml
 
@@ -214,6 +214,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "GITHUB_ACTOR" -> "precog-bot",
         "GITHUB_TOKEN" -> s"$${{ secrets.GITHUB_TOKEN }}"),
 
+      // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
 
       /*githubWorkflowBuildPreamble ++= {
@@ -243,7 +244,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(s"./scripts/publishAndTag $${{ github.repository }}"),
         name = Some("Publish artifacts and create tag")),
 
-      githubWorkflowPublishBranchPatterns := Seq("*"),   // we already limit things to the branches we want
+      githubWorkflowPublishTargetBranches += BranchPredicate.StartsWith("backport/v"),
 
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",

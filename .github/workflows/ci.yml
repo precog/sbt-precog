@@ -97,7 +97,7 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (contains(github.ref, '*'))
+    if: github.event_name != 'pull_request' && (github.ref == 'master' || startsWith(github.ref, 'backport/v'))
     strategy:
       matrix:
         os: [ubuntu-latest]
