@@ -235,7 +235,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
           params = Map("ruby-version" -> "2.6")),
 
         WorkflowStep.Sbt(
-          List("transferCommonResources", "exportSecretsForActions", "transferPublishAndTagResources"),
+          List("transferCommonResources", "transferPublishAndTagResources", "exportSecretsForActions"),
           name = Some("Common sbt setup")),
 
         WorkflowStep.Run(List("./scripts/commonSetup"))),

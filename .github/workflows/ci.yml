@@ -162,7 +162,7 @@ jobs:
           ruby-version: 2.6
 
       - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions transferPublishAndTagResources
+        run: $SBT ++${{ matrix.scala }} transferCommonResources transferPublishAndTagResources exportSecretsForActions
 
       - run: ./scripts/commonSetup
 
