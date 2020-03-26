@@ -30,6 +30,11 @@ jobs:
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Echo ref
+        run: |
+          echo ${{ github.ref }}
+          exit 1
+
       - name: Checkout current branch (fast)
         uses: actions/checkout@v2
 
