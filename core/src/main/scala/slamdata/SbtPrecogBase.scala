@@ -289,11 +289,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
   import autoImporter._
 
   override def globalSettings =
-    githubActionsSettings ++
     Seq(
       internalPublishAsOSSProject := false,
 
-      concurrentRestrictions in Global := {
+      concurrentRestrictions := {
         val oldValue = (concurrentRestrictions in Global).value
         val maxTasks = 2
         if (githubIsWorkflowBuild.value)
@@ -304,16 +303,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
       },
 
       // Tasks tagged with `ExclusiveTest` should be run exclusively.
-      concurrentRestrictions in Global += Tags.exclusive(ExclusiveTest),
+      concurrentRestrictions += Tags.exclusive(ExclusiveTest),
 
       // UnsafeEvictions default settings
       unsafeEvictionsFatal := false,
       unsafeEvictionsConf := Seq.empty,
-      evictionWarningOptions in unsafeEvictionsCheck := EvictionWarningOptions.full
+      unsafeEvictionsCheck / evictionWarningOptions := EvictionWarningOptions.full
         .withWarnEvictionSummary(true)
         .withInfoAllEvictions(false))
 
   override def buildSettings =
+    githubActionsSettings ++
     addCommandAlias("ci", "; checkHeaders; test") ++
     {
       val vf = file(VersionsPath)
