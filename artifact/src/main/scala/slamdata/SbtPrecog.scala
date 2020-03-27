@@ -18,6 +18,7 @@ package precog
 
 import sbt._, Keys._
 
+import sbtghactions.GenerativeKeys.githubWorkflowDependencyPatterns
 import sbtghpackages.GitHubPackagesPlugin
 
 import scala.collection.immutable.Seq
