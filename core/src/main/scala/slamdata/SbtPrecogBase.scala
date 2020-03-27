@@ -49,6 +49,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
   private var foundLocalEvictions: Set[(String, String)] = Set()
 
+  private lazy val internalPublishAsOSSProject = settingKey[Boolean]("Internal proxy to lift the scoping on publishAsOSSProject")
+
   override def requires =
     plugins.JvmPlugin &&
     GitHubActionsPlugin &&
@@ -217,12 +219,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
 
-      /*githubWorkflowBuildPreamble ++= {
-        if (publishAsOSSProject.value)
+      githubWorkflowBuildPreamble ++= {
+        if (internalPublishAsOSSProject.value)
           Seq()
         else
           Seq(WorkflowStep.Sbt(List("transferCommonResources", "exportSecretsForActions")))
-      },*/
+      },
 
       githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
 
@@ -289,6 +291,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
   override def globalSettings =
     githubActionsSettings ++
     Seq(
+      internalPublishAsOSSProject := false,
+
       concurrentRestrictions in Global := {
         val oldValue = (concurrentRestrictions in Global).value
         val maxTasks = 2
@@ -498,6 +502,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
     commonBuildSettings ++
     commonPublishSettings ++
     Seq(
+      Global / internalPublishAsOSSProject := (Global / internalPublishAsOSSProject).value || publishAsOSSProject.value,
+
       version := {
         import scala.sys.process._
 
