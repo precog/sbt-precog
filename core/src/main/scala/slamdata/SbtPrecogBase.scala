@@ -328,9 +328,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       organizationName := "Precog",
       organizationHomepage := Some(url("https://precog.com")),
 
-      resolvers := Seq(
-        Resolver.sonatypeRepo("releases"),
-        Resolver.bintrayRepo("slamdata-inc", "maven-public")),
+      resolvers := Seq(Resolver.sonatypeRepo("releases")),
 
       checkLocalEvictions := {
         if (!foundLocalEvictions.isEmpty) {
@@ -519,13 +517,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
       update := {
         unsafeEvictionsCheck.value
         update.value
-      },
-
-      resolvers ++= {
-        if (!publishAsOSSProject.value)
-          Seq(Resolver.bintrayRepo("precog-inc", "maven-private"))
-        else
-          Seq.empty
       },
 
       // TODO: self-check, to run on PRs
