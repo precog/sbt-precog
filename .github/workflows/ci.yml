@@ -78,7 +78,7 @@ jobs:
           key: ${{ runner.os }}-sbt-cache-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}-${{ hashFiles('core/**/*.scala') }}-${{ hashFiles('plugin/**/*.scala') }}
 
       - name: Common sbt setup
-        if: secrets.ENCRYPTION_PASSWORD != null
+        if: env.ENCRYPTION_PASSWORD != null
         run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
 
       - name: Check that workflows are up to date
