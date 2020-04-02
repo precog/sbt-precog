@@ -223,7 +223,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         WorkflowStep.Sbt(
           List("transferCommonResources", "exportSecretsForActions"),
           name = Some("Common sbt setup"),
-          cond = Some("contains(secrets.*, 'ENCRYPTION_PASSWORD')")),
+          cond = Some("secrets.ENCRYPTION_PASSWORD != null")),
 
       githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
 
