@@ -219,12 +219,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
 
-      githubWorkflowBuildPreamble ++= {
-        if (internalPublishAsOSSProject.value)
-          Seq()
-        else
-          Seq(WorkflowStep.Sbt(List("transferCommonResources", "exportSecretsForActions")))
-      },
+      githubWorkflowBuildPreamble +=
+        WorkflowStep.Sbt(
+          List("transferCommonResources", "exportSecretsForActions"),
+          name = Some("Common sbt setup"),
+          cond = Some("env.ENCRYPTION_PASSWORD != null")),
 
       githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
 
