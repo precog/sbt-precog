@@ -6,12 +6,14 @@ ThisBuild / scalaVersion := "2.12.10"
 lazy val root = project
   .in(file("."))
   .aggregate(core, artifact, plugin)
+  .settings(name := "sbt-precog-root")
   .settings(noPublishSettings)
 
 lazy val core = project.in(file("core"))
   .settings(
     name := "sbt-precog-core",
-    scalacStrictMode := false)
+    scalacStrictMode := false,
+    /*Compile/sourceGenerators += graphqlCodegen.value*/)
 
 lazy val artifact = project.in(file("artifact"))
   .dependsOn(core)

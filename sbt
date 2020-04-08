@@ -486,7 +486,7 @@ EOM
   exit 1
 }
 
-# pick up completion if present; todo
+# pick up completion if present;
 [[ -r .sbt_completion.sh ]] && source .sbt_completion.sh
 
 # directory to store sbt launchers

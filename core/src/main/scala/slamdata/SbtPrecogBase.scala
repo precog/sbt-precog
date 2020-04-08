@@ -16,10 +16,14 @@
 
 package precog
 
-import sbt._
-import Keys._
-import sbt.Def.Initialize
-import sbt.complete.DefaultParsers.fileParser
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+
+import org.yaml.snakeyaml.Yaml
+
+import _root_.io.crashbox.gpg.SbtGpg
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import _root_.io.crashbox.gpg.SbtGpg
@@ -27,27 +31,23 @@ import sbtghactions.{GenerativeKeys, GitHubActionsPlugin, Ref, RefPredicate, Wor
 import GitHubActionsPlugin.autoImport._
 import org.yaml.snakeyaml.Yaml
 
+import sbt.Def.Initialize
+import sbt.Keys._
+import sbt._
+import sbt.complete.DefaultParsers.fileParser
+import sbtghactions.GitHubActionsPlugin
+import sbtghactions.GitHubActionsPlugin.autoImport._
 import sbttrickle.TricklePlugin
-import TricklePlugin.autoImport._
-import sbttrickle.metadata.{ModuleUpdateData, OutdatedRepository}
+import sbttrickle.TricklePlugin.autoImport._
+import sbttrickle.metadata.ModuleUpdateData
 
-import scala.{Boolean, None, Some, StringContext, sys}
-import scala.collection.immutable.{Seq, Set}
 import scala.collection.JavaConverters._
+import scala.collection.immutable.{Seq, Set}
 import scala.sys.process._
-import java.io.File
-import java.lang.{String, System}
-import java.nio.file.attribute.PosixFilePermission
-import PosixFilePermission.OWNER_EXECUTE
-import java.nio.file.Files
-
-import github4s.GithubResponses.GHResponse
-import github4s.domain.{Label, PullRequest}
 
 abstract class SbtPrecogBase extends AutoPlugin {
-  private[this] val AutobumpPrTitle = "Applied dependency updates"
-
   private var foundLocalEvictions: Set[(String, String)] = Set()
+  val VersionsPath = ".versions.json"
 
   private lazy val internalPublishAsOSSProject = settingKey[Boolean]("Internal proxy to lift the scoping on publishAsOSSProject")
 
@@ -60,7 +60,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
   override def trigger = allRequirements
 
   class autoImport extends SbtPrecogKeys {
-    val VersionsPath = ".versions.json"
     val BothScopes = "test->test;compile->compile"
 
     // Exclusive execution settings
@@ -444,13 +443,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
         } else {
           file.delete()
         }
-      },
-
-      // TODO make this suck less -- use labels
-      trickleGithubIsAutobumpPullRequest := { pr =>
-        pr.title == AutobumpPrTitle &&
-          pr.base.exists(_.ref == "master") &&
-          pr.head.exists(_.ref.startsWith("trickle/"))
       })
 
   private def runWithLogger(command: String, log: Logger, merge: Boolean = false, workingDir: Option[File] = None): Int = {
@@ -458,7 +450,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
     Process(command, workingDir) ! plogger
   }
 
-  // TODO: option to echo commands
   private def runWithLoggerSeq(command: Seq[String], log: Logger, merge: Boolean, workingDir: Option[File], env: (String, String)*): Int = {
     val plogger = ProcessLogger(log.info(_), if (merge) log.info(_) else log.error(_))
     Process(command, workingDir, env: _*) ! plogger
@@ -518,131 +509,66 @@ abstract class SbtPrecogBase extends AutoPlugin {
         update.value
       },
 
+      resolvers ++= {
+        if (!publishAsOSSProject.value)
+          Seq(Resolver.bintrayRepo("precog-inc", "maven-private"))
+        else
+          Seq.empty
+      },
+
       // TODO: self-check, to run on PRs
       // TODO: dry mode on not-a-build
       // TODO: cluster datasources/destinations
       // TODO: set trickleGitCommitMessage
-      // TODO: create PR must: Check for existence, create draft, check again, publish PR
-      trickleCreatePullRequest := {
-        val prior = trickleCreatePullRequest.value
-        val log = sLog.value
 
-        { (repo: OutdatedRepository) =>
-          import cats.effect.{ContextShift, IO}
+      trickleUpdateDependencies := {
+        val log = streams.value.log
+        val outdatedDependencies = trickleOutdatedDependencies.value
+        val dir = (ThisBuild / baseDirectory).value.toPath
+        val managedVersions = ManagedVersions(dir.resolve(VersionsPath))
 
-          import github4s.Github
-          import github4s.GithubResponses.GHResult
-          import github4s.domain.NewPullRequestData
+        def getChange(isRevision: Boolean, isBreaking: Boolean): String =
+          if (isRevision) "revision"
+          else if (isBreaking) "breaking"
+          else "feature"
 
-          import scala.concurrent.ExecutionContext.Implicits.global
+        var isRevision = true
+        var isBreaking = false
+        var hasErrors = false
 
-          implicit val cs: ContextShift[IO] = IO.contextShift(global)
-
-          prior(repo)
-
-          val authenticated = {
-            val uri = new URI(repo.url)
-            s"${uri.getScheme}://${sys.env("GITHUB_ACTOR")}:${sys.env("GITHUB_TOKEN")}@${uri.getHost}${uri.getPath}"
-          }
-
-          val dir = Files.createTempDirectory("sbt-precog")
-          val dirFile = dir.toFile
-
-          if (runWithLogger(s"git clone --depth 1 $authenticated ${dirFile.getPath}", log, merge = true) != 0) {
-            sys.error("git-clone exited with error")
-          }
-
-          val branchName = s"trickle/version-bump-${System.currentTimeMillis()}"
-          if (runWithLogger(s"git checkout -b $branchName", log, merge = true, workingDir = Some(dirFile)) != 0) {
-            sys.error("git-checkout exited with error")
-          }
-
-          // TODO: the update logic should be run by the target repo
-
-          val managed = ManagedVersions(dir.resolve(VersionsPath))
-          var isRevision = true
-          var isBreaking = false
-          repo.updates foreach {
-            case ModuleUpdateData(_, _, newRevision, dependencyRepo, _) =>
-              managed.get(dependencyRepo) foreach { oldVStr =>
-                val vOld = VersionNumber(oldVStr)
-                val vNew = VersionNumber(newRevision)
-                isRevision &&= VersionNumber.SecondSegment.isCompatible(vOld, vNew)
-                isBreaking ||= !VersionNumber.SemVer.isCompatible(vOld, vNew)
-              }
-
-              managed(dependencyRepo) = newRevision
-          }
-
-          val change =
-            if (isRevision) "revision"
-            else if (isBreaking) "breaking"
-            else "feature"
-
-          val dependencyCheck = repo.updates
-            .map(u => s"${u.dependency.organization}:${u.dependency.name}:${u.newRevision}")
-            .mkString("trickleCheckVersion ", " ", "")
-
-          if (runWithLoggerSeq(Seq("sbt", dependencyCheck), log, merge=true, Some(dirFile)) != 0) {
-            sys.error(s"repository ${repo.repository} did not apply versions file correctly")
-          }
-
-          if (runWithLoggerSeq(Seq("sbt", "update"), log, merge=true, Some(dirFile)) != 0) {
-            log.warn("was unable to run `sbt update` following the trickle application")
-            log.warn("this may mean that the some artifacts are not yet propagated; skipping")
-          } else {
-            if (runWithLogger(s"git add $VersionsPath", log, merge = true, workingDir = Some(dirFile)) != 0) {
-              sys.error("git-add exited with error")
+        outdatedDependencies.map {
+          case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
+        }.foreach {
+          case (newRevision, dependencyRepository) =>
+            managedVersions.get(dependencyRepository) match {
+              case Some(currentRevision) =>
+                val currentVersion = VersionNumber(currentRevision)
+                val newVersion = VersionNumber(newRevision)
+                val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
+                val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
+                isRevision &&= testRevision
+                isBreaking ||= testBreaking
+                log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
+              case None                  =>
+                // TODO: use scalafix to change build.sbt
+                hasErrors ||= true
+                log.error(s"$dependencyRepository not present on $VersionsPath")
+                log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
             }
 
-            val commitECode = runWithLoggerSeq(
-              Seq("git", "commit", "-m", AutobumpPrTitle),
-              log,
-              true,
-              Some(dirFile),
-              "GIT_AUTHOR_NAME" -> s"Precog Bot (${trickleRepositoryName.value})",
-              "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
-              "GIT_COMMITTER_NAME" -> "Precog Bot",
-              "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
-
-            if (commitECode != 0) {
-              log.warn("git-commit exited with error")
-              log.warn("this usually means the target repository was *already* at the latest version but hasn't published yet")
-              log.warn("you should check for a stuck trickle PR on that repository")
-            } else {
-              if (runWithLogger(s"git push origin $branchName", log, merge = true, workingDir = Some(dirFile)) != 0) {
-                sys.error("git-push exited with error")
-              }
-
-              val (owner, repoSlug) = repo.ownerAndRepository.getOrElse(sys.error(s"invalid url ${repo.url}"))
-
-              val createPrF: IO[GHResponse[PullRequest]] = Github[IO](sys.env.get("GITHUB_TOKEN"))
-                .pullRequests
-                .createPullRequest(
-                  owner,
-                  repoSlug,
-                  NewPullRequestData(AutobumpPrTitle, s"This PR brought to you by sbt-trickle via ${trickleRepositoryName.value}. Please do come again!"),   // TODO
-                  branchName,
-                  "master",
-                  Some(true))
-
-              def assignLabelList(pr: Int): IO[GHResponse[List[Label]]] = Github[IO](sys.env.get("GITHUB_TOKEN"))
-                .issues
-                .addLabels(owner, repoSlug, pr, List(s"version: $change"))
-
-              val createAndLabelPr = for {
-                response <- createPrF
-                result <- IO.fromEither(response)
-                GHResult(pullRequest, _, _) = result
-                _ <- assignLabelList(pullRequest.number)
-              } yield pullRequest
-
-              createAndLabelPr.attempt.unsafeRunSync.fold(
-                throw _,
-                r => log.info(s"Opened $owner/$repoSlug#${r.number}"))
-            }
-          }
+            managedVersions(dependencyRepository) = newRevision
         }
+
+        log.info(s"version: ${getChange(isRevision, isBreaking)}")
+
+        if (hasErrors) sys.error("Unmanaged dependencies found!")
+      },
+
+      trickleCreatePullRequest := { repository =>
+        val previous = trickleCreatePullRequest.value
+        val author = trickleRepositoryName.value
+        previous(repository)
+        new AutoBump(repository, sys.env("GITHUB_TOKEN")).createPullRequest(author, sLog.value)
       })
 }
 
