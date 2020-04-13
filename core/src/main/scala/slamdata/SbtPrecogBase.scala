@@ -26,17 +26,13 @@ import org.yaml.snakeyaml.Yaml
 import _root_.io.crashbox.gpg.SbtGpg
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
-import _root_.io.crashbox.gpg.SbtGpg
-import sbtghactions.{GenerativeKeys, GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}, GenerativeKeys._
-import GitHubActionsPlugin.autoImport._
-import org.yaml.snakeyaml.Yaml
-
 import sbt.Def.Initialize
 import sbt.Keys._
-import sbt._
 import sbt.complete.DefaultParsers.fileParser
-import sbtghactions.GitHubActionsPlugin
+import sbt.{Def, _}
+import sbtghactions.GenerativeKeys._
 import sbtghactions.GitHubActionsPlugin.autoImport._
+import sbtghactions.{GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}
 import sbttrickle.TricklePlugin
 import sbttrickle.TricklePlugin.autoImport._
 import sbttrickle.metadata.ModuleUpdateData
@@ -70,7 +66,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     def exclusiveTasks(tasks: Scoped*) =
       tasks.flatMap(inTask(_)(tags := Seq((ExclusiveTest, 1))))
 
-    def scalacOptions_2_10(strict: Boolean) = {
+    def scalacOptions_2_10(strict: Boolean): Seq[String] = {
       val global = Seq(
         "-encoding", "UTF-8",
         "-deprecation",
@@ -94,7 +90,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       }
     }
 
-    def scalacOptions_2_11(strict: Boolean) = {
+    def scalacOptions_2_11(strict: Boolean): Seq[String] = {
       val global = Seq(
         "-Ypartial-unification",
         "-Ywarn-unused-import")
@@ -105,9 +101,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
         global
     }
 
-    def scalacOptions_2_12(strict: Boolean) = Seq("-target:jvm-1.8")
+    def scalacOptions_2_12(strict: Boolean): Seq[String] = Seq("-target:jvm-1.8")
 
-    def scalacOptions_2_13(strict: Boolean) = {
+    def scalacOptions_2_13(strict: Boolean): Seq[String] = {
       val numCPUs = java.lang.Runtime.getRuntime.availableProcessors()
       Seq(
         s"-Ybackend-parallelism", numCPUs.toString,
@@ -117,7 +113,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Wvalue-discard")
     }
 
-    val scalacOptionsRemoved_2_13 =
+    val scalacOptionsRemoved_2_13: Seq[String] =
       Seq(
         "-Yno-adapted-args",
         "-Ywarn-unused-import",
@@ -126,14 +122,14 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Ywarn-dead-code",
         "-Xfuture")
 
-    val headerLicenseSettings = Seq(
+    val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2020", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       checkHeaders := {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
       })
 
-    lazy val commonBuildSettings = Seq(
+    lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
       outputStrategy := Some(StdoutOutput),
       autoCompilerPlugins := true,
       autoAPIMappings := true,
@@ -187,7 +183,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       unsafeEvictionsCheck := unsafeEvictionsCheckTask.value,
     ) ++ headerLicenseSettings
 
-    lazy val commonPublishSettings = Seq(
+    lazy val commonPublishSettings: Seq[Def.Setting[_]] = Seq(
       licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),
 
       publishAsOSSProject := true,
@@ -205,7 +201,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
           url = new URL("http://precog.com")
         )))
 
-    lazy val githubActionsSettings = Seq(
+    lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
 
       githubWorkflowEnv := Map(
@@ -286,7 +282,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
   protected val autoImporter: autoImport
   import autoImporter._
 
-  override def globalSettings =
+  override def globalSettings: scala.Seq[Def.Setting[_]] =
     Seq(
       internalPublishAsOSSProject := false,
 
@@ -310,7 +306,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         .withWarnEvictionSummary(true)
         .withInfoAllEvictions(false))
 
-  override def buildSettings =
+  override def buildSettings: scala.Seq[Def.Setting[_]] =
     githubActionsSettings ++
     addCommandAlias("ci", "; checkHeaders; test") ++
     {
@@ -329,7 +325,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       resolvers := Seq(Resolver.sonatypeRepo("releases")),
 
       checkLocalEvictions := {
-        if (!foundLocalEvictions.isEmpty) {
+        if (foundLocalEvictions.nonEmpty) {
           sys.error(s"found active local evictions: ${foundLocalEvictions.mkString("[", ", ", "]")}; publication is disabled")
         }
       },
@@ -386,7 +382,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         val log = streams.value.log
         val plogger = ProcessLogger(log.info(_), log.error(_))
 
-        if (!sys.env.get("ENCRYPTION_PASSWORD").isDefined) {
+        if (sys.env.get("ENCRYPTION_PASSWORD").isEmpty) {
           sys.error("$ENCRYPTION_PASSWORD not set")
         }
 
@@ -394,7 +390,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         secrets.value foreach { file =>
           if (file.exists()) {
-            val decrypted = s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in ${file} -d""" !! plogger
+            val decrypted = s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! plogger
             val parsed = yaml.load[Any](decrypted)
               .asInstanceOf[java.util.Map[String, String]]
               .asScala
@@ -410,49 +406,34 @@ abstract class SbtPrecogBase extends AutoPlugin {
       },
 
       decryptSecret / aggregate := false,
-      decryptSecret := {
-        if (!sys.env.get("ENCRYPTION_PASSWORD").isDefined) {
-          sys.error("$ENCRYPTION_PASSWORD not set")
-        }
-
-        val file = fileParser(baseDirectory.value).parsed
-        val log = streams.value.log
-        val ecode =
-          runWithLogger(s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in ${file} -out ${file.getPath().replaceAll("\\.enc$", "")} -d""", log)
-
-        if (ecode != 0) {
-          sys.error(s"openssl exited with status $ecode")
-        } else {
-          file.delete()
-        }
-      },
+      decryptSecret := crypt("-d", _.stripSuffix(".enc")).evaluated,
 
       encryptSecret / aggregate := false,
-      encryptSecret := {
-        if (!sys.env.get("ENCRYPTION_PASSWORD").isDefined) {
-          sys.error("$ENCRYPTION_PASSWORD not set")
-        }
+      encryptSecret := crypt("-e", _ + ".enc").evaluated)
 
-        val file = fileParser(baseDirectory.value).parsed
-        val log = streams.value.log
-        val ecode =
-          runWithLogger(s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in ${file} -out ${file}.enc""", log)
+  def crypt(operation: String, destFile: String => String): Initialize[InputTask[Unit]] = Def.inputTask {
+    val log = streams.value.log
 
-        if (ecode != 0) {
-          sys.error(s"openssl exited with status $ecode")
-        } else {
-          file.delete()
-        }
-      })
+    if (sys.env.get("ENCRYPTION_PASSWORD").isEmpty) {
+      log.error("ENCRYPTION_PASSWORD not set")
+      sys.error("$ENCRYPTION_PASSWORD not set")
+    }
+
+    val file = fileParser(baseDirectory.value).parsed
+    val output = destFile(file.getPath)
+    val exitCode =
+      runWithLogger(s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -out $output $operation""", log)
+    if (exitCode != 0) {
+      log.error(s"openssl exited with status $exitCode")
+      sys.error(s"openssl exited with status $exitCode")
+    } else {
+      file.delete()
+    }
+  }
 
   private def runWithLogger(command: String, log: Logger, merge: Boolean = false, workingDir: Option[File] = None): Int = {
     val plogger = ProcessLogger(log.info(_), if (merge) log.info(_) else log.error(_))
     Process(command, workingDir) ! plogger
-  }
-
-  private def runWithLoggerSeq(command: Seq[String], log: Logger, merge: Boolean, workingDir: Option[File], env: (String, String)*): Int = {
-    val plogger = ProcessLogger(log.info(_), if (merge) log.info(_) else log.error(_))
-    Process(command, workingDir, env: _*) ! plogger
   }
 
   def unsafeEvictionsCheckTask: Initialize[Task[UpdateReport]] = Def.task {
@@ -479,13 +460,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
     }
   }
 
-  protected def transferToBaseDir(prefix: String, baseDir: File, srcs: String*) =
+  protected def transferToBaseDir(prefix: String, baseDir: File, srcs: String*): Unit =
     srcs.foreach(src => transfer(prefix + "/" + src, baseDir / src))
 
-  protected def transferScripts(prefix: String, baseDir: File, srcs: String*) =
+  protected def transferScripts(prefix: String, baseDir: File, srcs: String*): Unit =
     srcs.foreach(src => transfer(prefix + "/" + src, baseDir / "scripts" / src, Set(OWNER_EXECUTE)))
 
-  override def projectSettings =
+  override def projectSettings: scala.Seq[Def.Setting[_]] =
     AutomateHeaderPlugin.projectSettings ++
     commonBuildSettings ++
     commonPublishSettings ++
