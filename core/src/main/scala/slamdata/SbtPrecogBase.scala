@@ -549,7 +549,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         val previous = trickleCreatePullRequest.value
         val author = trickleRepositoryName.value
         previous(repository)
-        new AutoBump(repository, sys.env("GITHUB_TOKEN")).createPullRequest(author, sLog.value)
+        new AutoBump(author, repository, sys.env("GITHUB_TOKEN"), sLog.value).createPullRequest().unsafeRunSync()
       })
 }
 

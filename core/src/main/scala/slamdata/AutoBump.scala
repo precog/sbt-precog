@@ -33,9 +33,7 @@ import sbttrickle.metadata.OutdatedRepository
 import fs2.{Chunk, Stream}
 
 import scala.collection.immutable.Seq
-import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.sys.process._
 import scala.util.Try
 import scala.util.matching.Regex
 
@@ -151,7 +149,7 @@ object AutoBump {
   }
 }
 
-class AutoBump(repository: OutdatedRepository, token: String) {
+class AutoBump(authorRepository: String, repository: OutdatedRepository, token: String, log: Logger) {
   import AutoBump._
 
   assert(url(repository.url).getHost == "github.com")
@@ -160,6 +158,7 @@ class AutoBump(repository: OutdatedRepository, token: String) {
   val github: Github[IO] = Github[IO](Some(token))
   val (owner, repoSlug) = repository.ownerAndRepository.getOrElse(sys.error(s"invalid url ${repository.url}"))
   val sbt: String = sys.env.getOrElse("SBT", "sbt")
+  val authenticated = s"https://_:$token@github.com/$owner/$repoSlug"
 
   /**
    * Finds primary open autobump pull request, if one exists.
@@ -232,85 +231,85 @@ class AutoBump(repository: OutdatedRepository, token: String) {
     github.issues.removeLabel(owner, repoSlug, pullRequest.number, label).rethrow
   }
 
-  def createPullRequest(authorRepository: String, log: Logger): Boolean = {
-    val authenticated = s"https://_:$token@github.com/$owner/$repoSlug"
+  def tryUpdateDependencies: IO[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
+    for {
+      dir <- IO(Files.createTempDirectory("sbt-precog"))
+      dirFile = dir.toFile
+      _ <- Runner[IO](log) ! s"git clone --depth 1 $authenticated ${dirFile.getPath}"
+      oldestPullRequest <- getOldestAutoBumpPullRequest
+      (flag, branchName) <- getBranch(oldestPullRequest)
+      runner = Runner[IO](log).cd(dirFile)
+      _ <- runner ! s"git checkout $flag $branchName"
+      lines <- runner ! s"$sbt trickleUpdateDependencies"
+      changes = extractChanges(lines)
+      label = extractLabel(lines)
+      _ <- runner ! s"$sbt trickleIsUpToDate"
+      updateResult <- (runner.stderrToStdout ! s"$sbt update").attempt
+    } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
+  }
 
-    val tryUpdateDependencies: IO[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
-      for {
-        dir <- IO(Files.createTempDirectory("sbt-precog"))
-        dirFile = dir.toFile
-        _ <- run(s"git clone --depth 1 $authenticated ${dirFile.getPath}", log)
-        oldestPullRequest <- getOldestAutoBumpPullRequest
-        (flag, branchName) <- getBranch(oldestPullRequest)
-        _ <- run(s"git checkout $flag $branchName", log, workingDir = Some(dirFile))
-        lines <- run(s"$sbt trickleUpdateDependencies", log, workingDir = Some(dirFile))
-        changes = extractChanges(lines)
-        label = extractLabel(lines)
-        _ <- run(s"$sbt trickleIsUpToDate", log, workingDir = Some(dirFile))
-        updateResult <- run(s"$sbt update", log, merge = true, Some(dirFile)).attempt
-      } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
-    }
+  // TODO: add changes to commit message?
+  def tryCommit(dirFile: File): IO[Either[Warnings, Unit]] = {
+    val runner = Runner[IO](log)
+      .cd(dirFile)
+      .stderrToStdout
+      .withEnv(
+        "GIT_AUTHOR_NAME" -> s"Precog Bot ($authorRepository)",
+        "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
+        "GIT_COMMITTER_NAME" -> s"Precog Bot ($authorRepository)",
+        "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
+    for {
+      _ <- runner ! s"git add ."
+      result <- (runner ! Seq("git", "commit", "-m", autoBumpCommitTitle(authorRepository))).void.attempt
+    } yield result.leftMap(_ => Warnings.NoChangesError)
+  }
 
-    // TODO: add changes to commit message?
-    def tryCommit(dirFile: File): IO[Either[Warnings, Unit]] = {
-      for {
-        _ <- run(s"git add .", log, merge = true, workingDir = Some(dirFile))
-        result <- run(
-          Seq("git", "commit", "-m", autoBumpCommitTitle(authorRepository)),
-          log,
-          false,
-          Some(dirFile),
-          "GIT_AUTHOR_NAME" -> s"Precog Bot ($authorRepository)",
-          "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
-          "GIT_COMMITTER_NAME" -> s"Precog Bot ($authorRepository)",
-          "GIT_COMMITTER_EMAIL" -> "bot@precog.com").void.attempt
-      } yield result.leftMap(_ => Warnings.NoChangesError)
-    }
+  def tryPush(dirFile: File, branchName: String): IO[Either[Warnings, Unit]] = {
+    val runner = Runner[IO](log).cd(dirFile).stderrToStdout
+    (runner ! s"git push origin $branchName")
+      .void
+      .attempt
+      .map(_.leftMap(_ => Warnings.PushError))
+  }
 
-    def tryPush(dirFile: File, branchName: String): IO[Either[Warnings, Unit]] = {
-      run(s"git push origin $branchName", log, merge = true, workingDir = Some(dirFile))
-        .void
-        .attempt
-        .map(_.leftMap(_ => Warnings.PushError))
-    }
+  def ifOldest(pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
+    _ <- markReady(pullRequest)
+    _ <- IO(log.info(s"Marked $owner/$repoSlug#${pullRequest.number} ready for review"))
+  } yield pullRequest.asRight[Warnings]
 
-    def ifOldest(pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
-      _ <- markReady(pullRequest)
-      _ <- IO(log.info(s"Marked $owner/$repoSlug#${pullRequest.number} ready for review"))
-    } yield pullRequest.asRight[Warnings]
+  def ifNotOldest(oldest: PullRequestDraft, pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
+    _ <- close(pullRequest, s"${pullRequest.title} (preceded by #${oldest.number})")
+    _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number}, preceded by $owner/$repoSlug#${oldest.number}"))
+    _ <- deleteBranch(pullRequest)
+    _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
+  } yield Warnings.NotOldest(oldest, pullRequest).asLeft[PullRequestDraft]
 
-    def ifNotOldest(oldest: PullRequestDraft, pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
-      _ <- close(pullRequest, s"${pullRequest.title} (preceded by #${oldest.number})")
-      _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number}, preceded by $owner/$repoSlug#${oldest.number}"))
-      _ <- deleteBranch(pullRequest)
-      _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
-    } yield Warnings.NotOldest(oldest, pullRequest).asLeft[PullRequestDraft]
+  // TODO: Update pull request description?
+  def createOrUpdatePullRequest(
+    branchName: String,
+    changes: List[String],
+    changeLabel: ChangeLabel,
+    maybePullRequest: Option[PullRequestDraft])
+  : IO[Either[Warnings, PullRequestDraft]] = {
+    for {
+      pullRequest <- (maybePullRequest fold {
+        draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
+          .flatTap(pullRequest => IO(log.info(s"Opened $owner/$repoSlug#${pullRequest.number}")))
+      })(IO.pure)
+      labels <- getLabels(pullRequest.number)
+      prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
+      highestChange = (prChangeLabels + changeLabel).max
+      lowerChanges = (prChangeLabels - highestChange).toList
+      _ <- if (prChangeLabels.contains(highestChange)) IO.unit else assignLabel(highestChange.label, pullRequest)
+      _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
+      oldestPullRequest <- getOldestAutoBumpPullRequest
+      res <- oldestPullRequest
+        .filter(_.number == pullRequest.number)
+        .fold(ifOldest(pullRequest))(ifNotOldest(_, pullRequest))
+    } yield res
+  }
 
-    // TODO: Update pull request description?
-    def createOrUpdatePullRequest(
-        branchName: String,
-        changes: List[String],
-        changeLabel: ChangeLabel,
-        maybePullRequest: Option[PullRequestDraft])
-        : IO[Either[Warnings, PullRequestDraft]] = {
-      for {
-        pullRequest <- (maybePullRequest fold {
-          draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
-            .flatTap(pullRequest => IO(log.info(s"Opened $owner/$repoSlug#${pullRequest.number}")))
-        })(IO.pure)
-        labels <- getLabels(pullRequest.number)
-        prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
-        highestChange = (prChangeLabels + changeLabel).max
-        lowerChanges = (prChangeLabels - highestChange).toList
-        _ <- if (prChangeLabels.contains(highestChange)) IO.unit else assignLabel(highestChange.label, pullRequest)
-        _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
-        oldestPullRequest <- getOldestAutoBumpPullRequest
-        res <- oldestPullRequest
-          .filter(_.number == pullRequest.number)
-          .fold(ifOldest(pullRequest))(ifNotOldest(_, pullRequest))
-      } yield res
-    }
-
+  def createPullRequest(): IO[Boolean] = {
     val app = for {
       (dir, branchName, maybePullRequest, changes, label) <- EitherT(tryUpdateDependencies)
       _ <- EitherT(tryCommit(dir))
@@ -318,66 +317,6 @@ class AutoBump(repository: OutdatedRepository, token: String) {
       pullRequest <- EitherT(createOrUpdatePullRequest(branchName, changes, label, maybePullRequest))
     } yield pullRequest
 
-    app.leftSemiflatMap(_.warn(log)).value.unsafeRunSync().isRight
-  }
-
-  private def run(
-      command: String,
-      log: Logger,
-      merge: Boolean = false,
-      workingDir: Option[File] = None)
-      : IO[List[String]] = {
-    run(command.split("""\s+""").toVector, log, merge, workingDir)
-  }
-
-  private def run(
-      command: Seq[String],
-      log: Logger,
-      merge: Boolean,
-      workingDir: Option[File],
-      env: (String, String)*)
-      : IO[List[String]] = {
-    val lines = mutable.Buffer[String]()
-    val processLogger = getProcessLogger(log, merge, lines)
-    run_?(command, log, processLogger, workingDir, env: _*)
-      .ensureOr(res => new RuntimeException(s"${command.take(2).mkString(" ")} exit code $res"))(_ == 0)
-      .as(lines.toList)
-  }
-
-  private def run_?(
-      command: Seq[String],
-      log: Logger,
-      processLogger: ProcessLogger,
-      workingDir: Option[File],
-      env: (String, String)*)
-      : IO[Int] = {
-    for {
-      _ <- safeEcho(command, log)
-      exitCode <- IO(Process(command, workingDir, env: _*) ! processLogger)
-    } yield exitCode
-  }
-
-  private def safeEcho(command: Seq[String], log: Logger): IO[Unit] = IO {
-    val commandLine = command.map(quoteIfNeeded).mkString(" ")
-    val safeCommandLine = commandLine.replaceAllLiterally(token, "XXXXX")
-    log.info(safeCommandLine)
-  }
-
-  private def getProcessLogger(log: Logger, merge: Boolean, lines: mutable.Buffer[String]): ProcessLogger = {
-    val stdout = { line: String =>
-      log.info(line)
-      lines.append(line)
-    }
-    val stderr = { line: String =>
-      if (merge) log.info(line) else log.error(line)
-      lines.append(line)
-    }
-    ProcessLogger(stdout, stderr)
-  }
-
-  private def quoteIfNeeded(s: String): String = {
-    if (s.matches("\\w+")) s
-    else if (s.contains("'")) s"$$'${s.map(c => if (c == '\'') "\\'" else c.toString).mkString}'"
-    else s"'$s'"
+    app.leftSemiflatMap(_.warn(log)).value.map(_.isRight)
   }
 }
