@@ -39,51 +39,59 @@ case class PullRequestDraft(id: Int,
                            )
 
 object PullRequestDraft {
-//  implicit def toPullRequest(pr: PullRequestDraft): PullRequest = PullRequest(
-//    id = pr.id,
-//    number = pr.number,
-//    state = pr.state,
-//    title = pr.title,
-//    body = pr.body,
-//    locked = pr.locked,
-//    html_url = pr.html_url,
-//    created_at = pr.created_at,
-//    updated_at = pr.updated_at,
-//    closed_at = pr.closed_at,
-//    merged_at = pr.merged_at,
-//    merge_commit_sha = pr.merge_commit_sha,
-//    base = pr.base,
-//    head = pr.head,
-//    user = pr.user,
-//    assignee = pr.assignee
-//  )
+  implicit class ToPullRequestSyntax(pr: PullRequestDraft) {
+    def toPullRequest(pr: PullRequestDraft): PullRequest = PullRequest(
+      id = pr.id,
+      number = pr.number,
+      state = pr.state,
+      title = pr.title,
+      body = pr.body,
+      locked = pr.locked,
+      html_url = pr.html_url,
+      created_at = pr.created_at,
+      updated_at = pr.updated_at,
+      closed_at = pr.closed_at,
+      merged_at = pr.merged_at,
+      merge_commit_sha = pr.merge_commit_sha,
+      base = pr.base,
+      head = pr.head,
+      user = pr.user,
+      assignee = pr.assignee
+    )
+  }
 }
 
-sealed trait DraftPullRequest {
+sealed trait DraftPullRequest extends Product with Serializable {
   def head: String
   def base: String
   def maintainer_can_modify: Option[Boolean]
   def draft: Boolean
 }
 
-case class DraftPullRequestData(title: String,
-                                head: String,
-                                base: String,
-                                body: String,
-                                maintainer_can_modify: Option[Boolean] = Some(true),
-                                draft: Boolean = true
-                               ) extends DraftPullRequest
+object DraftPullRequest {
 
-case class DraftPullRequestIssue(issue: Int,
-                                 head: String,
-                                 base: String,
-                                 maintainer_can_modify: Option[Boolean] = Some(true),
-                                 draft: Boolean = true
-                                ) extends DraftPullRequest
+  final case class DraftPullRequestData(
+    title: String,
+    head: String,
+    base: String,
+    body: String,
+    maintainer_can_modify: Option[Boolean] = Some(true),
+    draft: Boolean = true)
+    extends DraftPullRequest
 
-case class PullRequestUpdate(title: Option[String] = None,
-                             body: Option[String] = None,
-                             state: Option[String] = None,
-                             base: Option[String] = None,
-                             maintainer_can_modify: Option[Boolean] = None
-                            )
+  final case class DraftPullRequestIssue(
+    issue: Int,
+    head: String,
+    base: String,
+    maintainer_can_modify: Option[Boolean] = Some(true),
+    draft: Boolean = true)
+    extends DraftPullRequest
+
+}
+
+final case class PullRequestUpdate(
+    title: Option[String] = None,
+    body: Option[String] = None,
+    state: Option[String] = None,
+    base: Option[String] = None,
+    maintainer_can_modify: Option[Boolean] = None)

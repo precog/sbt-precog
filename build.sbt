@@ -12,8 +12,7 @@ lazy val root = project
 lazy val core = project.in(file("core"))
   .settings(
     name := "sbt-precog-core",
-    scalacStrictMode := false,
-    /*Compile/sourceGenerators += graphqlCodegen.value*/)
+    scalacStrictMode := false)
 
 lazy val artifact = project.in(file("artifact"))
   .dependsOn(core)

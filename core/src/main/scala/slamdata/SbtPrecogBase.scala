@@ -538,7 +538,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         outdatedDependencies.map {
           case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
-        }.foreach {
+        } foreach {
           case (newRevision, dependencyRepository) =>
             managedVersions.get(dependencyRepository) match {
               case Some(currentRevision) =>

@@ -22,26 +22,32 @@ import precog.domain._
 
 trait PullRequests[F[_]] extends github4s.algebras.PullRequests[F] {
   /** Create pull request as draft. */
-  def draftPullRequest(owner: String,
-                       repo: String,
-                       newPullRequest: NewPullRequest,
-                       head: String,
-                       base: String,
-                       maintainerCanModify: Option[Boolean] = Some(true),
-                       headers: Map[String, String] = Map.empty): F[GHResponse[PullRequestDraft]]
+  def draftPullRequest(
+      owner: String,
+      repo: String,
+      newPullRequest: NewPullRequest,
+      head: String,
+      base: String,
+      maintainerCanModify: Option[Boolean] = Some(true),
+      headers: Map[String, String] = Map.empty)
+      : F[GHResponse[PullRequestDraft]]
 
   /** List both draft and non-draft pull requests, but return their draft flag. */
-  def listDraftPullRequests(owner: String,
-                            repo: String,
-                            filters: List[PRFilter] = Nil,
-                            pagination: Option[Pagination] = None,
-                            headers: Map[String, String] = Map()): F[GHResponse[List[PullRequestDraft]]]
+  def listDraftPullRequests(
+      owner: String,
+      repo: String,
+      filters: List[PRFilter] = Nil,
+      pagination: Option[Pagination] = None,
+      headers: Map[String, String] = Map())
+      : F[GHResponse[List[PullRequestDraft]]]
 
-  def updatePullRequest(owner: String,
-                        repo: String,
-                        number: Int,
-                        fields: PullRequestUpdate,
-                        headers: Map[String, String] = Map()): F[GHResponse[PullRequestDraft]]
+  def updatePullRequest(
+      owner: String,
+      repo: String,
+      number: Int,
+      fields: PullRequestUpdate,
+      headers: Map[String, String] = Map())
+      : F[GHResponse[PullRequestDraft]]
 
   /**
    * Mark pull request as ready to review, removing its "draft" status.

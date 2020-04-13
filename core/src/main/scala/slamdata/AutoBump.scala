@@ -20,7 +20,7 @@ import java.nio.file.Files
 
 import org.http4s.Uri
 
-import cats.Monad
+import cats.{Monad, Order}
 import cats.data.EitherT
 import cats.effect.IO.contextShift
 import cats.effect.{ContextShift, IO, Sync}
@@ -40,41 +40,47 @@ import scala.util.Try
 import scala.util.matching.Regex
 
 object AutoBump {
-  sealed trait Warnings {
+  sealed trait Warnings extends Product with Serializable {
     def warn(log: Logger): IO[Unit]
   }
-  case object UpdateError extends Warnings {
-    def warn(log: Logger): IO[Unit] = IO {
-      log.warn("was unable to run `sbt update` following the trickle application")
-      log.warn("this may mean that the some artifacts are not yet propagated; skipping")
+  object Warnings {
+    case object UpdateError extends Warnings {
+      def warn(log: Logger): IO[Unit] = IO {
+        log.warn("was unable to run `sbt update` following the trickle application")
+        log.warn("this may mean that the some artifacts are not yet propagated; skipping")
+      }
     }
-  }
-  case object NoChangesError extends Warnings {
-    def warn(log: Logger): IO[Unit] = IO {
-      log.warn("git-commit exited with error")
-      log.warn("this usually means the target repository was *already* at the latest version but hasn't published yet")
-      log.warn("you should check for a stuck trickle PR on that repository")
+    case object NoChangesError extends Warnings {
+      def warn(log: Logger): IO[Unit] = IO {
+        log.warn("git-commit exited with error")
+        log.warn("this usually means the target repository was *already* at the latest version but hasn't published yet")
+        log.warn("you should check for a stuck trickle PR on that repository")
+      }
     }
-  }
-  case object PushError extends Warnings {
-    def warn(log: Logger): IO[Unit] = IO {
-      log.warn("git-push exited with error")
-      log.warn("this usually means some other repository updated the pull request before this one")
+    case object PushError extends Warnings {
+      def warn(log: Logger): IO[Unit] = IO {
+        log.warn("git-push exited with error")
+        log.warn("this usually means some other repository updated the pull request before this one")
+      }
     }
-  }
-  case class NotOldest(oldest: PullRequestDraft, draft: PullRequestDraft) extends Warnings {
-    def warn(log: Logger): IO[Unit] = IO {
-      log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
-      log.warn("this usually means two or more repositories finished build at the same time,")
-      log.warn("and some other repository beat this one to pull request creation.")
+    final case class NotOldest(oldest: PullRequestDraft, draft: PullRequestDraft) extends Warnings {
+      def warn(log: Logger): IO[Unit] = IO {
+        log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
+        log.warn("this usually means two or more repositories finished build at the same time,")
+        log.warn("and some other repository beat this one to pull request creation.")
+      }
     }
   }
 
-  sealed abstract class ChangeLabel(val label: String)
+  sealed abstract class ChangeLabel(val label: String) extends Product with Serializable
   object ChangeLabel {
-    val values: List[ChangeLabel] = List(RevisionChange, FeatureChange, BreakingChange)
+    case object Revision extends ChangeLabel("version: revision")
+    case object Feature extends ChangeLabel("version: feature")
+    case object Breaking extends ChangeLabel("version: breaking")
+
+    val values: List[ChangeLabel] = List(Revision, Feature, Breaking)
     val order: Map[ChangeLabel, Int] = values.zipWithIndex.toMap
-    implicit val ordering: Ordering[ChangeLabel] = Ordering.by(order)
+    implicit val ordering: Order[ChangeLabel] = Order.by(order)
     val fromString: Map[String, ChangeLabel] = values.map(change => change.label -> change).toMap
     val labelPattern: Regex = values.mkString("|").r
 
@@ -84,11 +90,8 @@ object AutoBump {
 
     def unapply(arg: String): Option[ChangeLabel] = labelPattern.findFirstIn(arg).flatMap(apply)
   }
-  case object RevisionChange extends ChangeLabel("version: revision")
-  case object FeatureChange extends ChangeLabel("version: feature")
-  case object BreakingChange extends ChangeLabel("version: breaking")
 
-  implicit class Unpack[F[_]: Monad, A](response: F[GHResponse[A]]) {
+  implicit class UnpackSyntax[F[_]: Monad, A](response: F[GHResponse[A]]) {
     def unpack: F[Either[GHException, A]] = EitherT(response).map(_.result).value
   }
 
@@ -97,10 +100,12 @@ object AutoBump {
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
   val LabelPattern: Regex = "version: \\w+".r
 
-  def autoBumpCommitTitle(author: String) = s"Applied dependency updates by $author"
+  def autoBumpCommitTitle(author: String): String = s"Applied dependency updates by $author"
 
-  def autoPage[F[_]: Sync, T](first: Pagination)
-                             (call: Pagination => F[Either[GHException, GHResult[List[T]]]]): Stream[F, T] = {
+  def autoPage[F[_]: Sync, T](
+      first: Pagination)(
+      call: Pagination => F[Either[GHException, GHResult[List[T]]]])
+      : Stream[F, T] = {
     val chunker = call.andThen(_.rethrow.map(res => nextPage(getRelations(res.headers)).map(Chunk.seq(res.result) -> _)))
     Stream.unfoldChunkEval(first)(chunker)
   }
@@ -112,8 +117,8 @@ object AutoBump {
   /** Decodes github's "Link" header into a map */
   def getRelations(headers: Map[String, String]): Map[String, (Int, Int)] = {
     val relations = for {
-      header <- headers.map { case (k, v) => k.toLowerCase -> v }.collect { case ("link", header) => header }
-      LinkRelation(url, relation) <- LinkRelation.findAllMatchIn(header)
+      linkValue <- headers collect { case (header, value) if header.toLowerCase == "link" => value }
+      LinkRelation(url, relation) <- LinkRelation.findAllMatchIn(linkValue)
       uri <- Uri.fromString(url).toSeq
       page <- uri.params.get("page")
       pageNum <- Try(page.toInt).toOption
@@ -125,9 +130,9 @@ object AutoBump {
 
   /** Extract change label from trickleUpdateDependencies log */
   def extractLabel(lines: List[String]): ChangeLabel = {
-    lines.collectFirst {
+    lines collectFirst {
       case ChangeLabel(label) => label
-    }.getOrElse(sys.error("Change label not found!"))
+    } getOrElse sys.error("Change label not found!")
   }
 
   /** Extract updated versions from trickleUpdateDependencies log */
@@ -165,11 +170,11 @@ class AutoBump(repository: OutdatedRepository, token: String) {
     getPullRequests
       .evalFilter(pullRequest => getLabels(pullRequest.number).map(labels => isAutoBump(pullRequest, labels)))
       .head
-      .compile.toList
+      .compile
+      .toList
       .map(_.headOption)
   }
 
-  // TODO: use Last-Modified/If-Modified-Since
   def getPullRequests: Stream[IO, PullRequestDraft] = {
     autoPage(Pagination(1, 100)) { pagination =>
       github.pullRequests.listDraftPullRequests(owner, repoSlug, PullRequestFilters, Some(pagination))
@@ -187,7 +192,8 @@ class AutoBump(repository: OutdatedRepository, token: String) {
       .draftPullRequest(
         owner,
         repoSlug,
-        NewPullRequestData(autoBumpCommitTitle(authorRepository),
+        NewPullRequestData(
+          autoBumpCommitTitle(authorRepository),
           s"This PR brought to you by sbt-trickle via $authorRepository. Changes:\n\n$changes"),
         branchName,
         "master")
@@ -216,10 +222,10 @@ class AutoBump(repository: OutdatedRepository, token: String) {
   }
 
   def deleteBranch(pullRequest: PullRequestDraft): IO[Unit] = {
-    pullRequest.head.map { base =>
+    (pullRequest.head map { base =>
       val branch = s"refs/heads/${base.ref}"
       github.gitData.deleteReference(owner, repoSlug, branch).rethrow
-    }.sequence.void
+    }).sequence.void
   }
 
   def removeLabel(pullRequest: PullRequestDraft, label: String): IO[GHResult[List[Label]]] = {
@@ -242,7 +248,7 @@ class AutoBump(repository: OutdatedRepository, token: String) {
         label = extractLabel(lines)
         _ <- run(s"$sbt trickleIsUpToDate", log, workingDir = Some(dirFile))
         updateResult <- run(s"$sbt update", log, merge = true, Some(dirFile)).attempt
-      } yield updateResult.bimap(_ => UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
+      } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
     }
 
     // TODO: add changes to commit message?
@@ -258,14 +264,14 @@ class AutoBump(repository: OutdatedRepository, token: String) {
           "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
           "GIT_COMMITTER_NAME" -> s"Precog Bot ($authorRepository)",
           "GIT_COMMITTER_EMAIL" -> "bot@precog.com").void.attempt
-      } yield result.leftMap(_ => NoChangesError)
+      } yield result.leftMap(_ => Warnings.NoChangesError)
     }
 
     def tryPush(dirFile: File, branchName: String): IO[Either[Warnings, Unit]] = {
       run(s"git push origin $branchName", log, merge = true, workingDir = Some(dirFile))
         .void
         .attempt
-        .map(_.leftMap(_ => PushError))
+        .map(_.leftMap(_ => Warnings.PushError))
     }
 
     def ifOldest(pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
@@ -278,18 +284,20 @@ class AutoBump(repository: OutdatedRepository, token: String) {
       _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number}, preceded by $owner/$repoSlug#${oldest.number}"))
       _ <- deleteBranch(pullRequest)
       _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
-    } yield NotOldest(oldest, pullRequest).asLeft[PullRequestDraft]
+    } yield Warnings.NotOldest(oldest, pullRequest).asLeft[PullRequestDraft]
 
     // TODO: Update pull request description?
-    def createOrUpdatePullRequest(branchName: String,
-                                  changes: List[String],
-                                  changeLabel: ChangeLabel,
-                                  maybePullRequest: Option[PullRequestDraft]): IO[Either[Warnings, PullRequestDraft]] = {
+    def createOrUpdatePullRequest(
+        branchName: String,
+        changes: List[String],
+        changeLabel: ChangeLabel,
+        maybePullRequest: Option[PullRequestDraft])
+        : IO[Either[Warnings, PullRequestDraft]] = {
       for {
-        pullRequest <- maybePullRequest.fold {
+        pullRequest <- (maybePullRequest fold {
           draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
             .flatTap(pullRequest => IO(log.info(s"Opened $owner/$repoSlug#${pullRequest.number}")))
-        }(IO.pure)
+        })(IO.pure)
         labels <- getLabels(pullRequest.number)
         prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
         highestChange = (prChangeLabels + changeLabel).max
@@ -313,18 +321,22 @@ class AutoBump(repository: OutdatedRepository, token: String) {
     app.leftSemiflatMap(_.warn(log)).value.unsafeRunSync().isRight
   }
 
-  private def run(command: String,
-                  log: Logger,
-                  merge: Boolean = false,
-                  workingDir: Option[File] = None): IO[List[String]] = {
+  private def run(
+      command: String,
+      log: Logger,
+      merge: Boolean = false,
+      workingDir: Option[File] = None)
+      : IO[List[String]] = {
     run(command.split("""\s+""").toVector, log, merge, workingDir)
   }
 
-  private def run(command: Seq[String],
-                  log: Logger,
-                  merge: Boolean,
-                  workingDir: Option[File],
-                  env: (String, String)*): IO[List[String]] = {
+  private def run(
+      command: Seq[String],
+      log: Logger,
+      merge: Boolean,
+      workingDir: Option[File],
+      env: (String, String)*)
+      : IO[List[String]] = {
     val lines = mutable.Buffer[String]()
     val processLogger = getProcessLogger(log, merge, lines)
     run_?(command, log, processLogger, workingDir, env: _*)
@@ -332,11 +344,13 @@ class AutoBump(repository: OutdatedRepository, token: String) {
       .as(lines.toList)
   }
 
-  private def run_?(command: Seq[String],
-                    log: Logger,
-                    processLogger: ProcessLogger,
-                    workingDir: Option[File],
-                    env: (String, String)*): IO[Int] = {
+  private def run_?(
+      command: Seq[String],
+      log: Logger,
+      processLogger: ProcessLogger,
+      workingDir: Option[File],
+      env: (String, String)*)
+      : IO[Int] = {
     for {
       _ <- safeEcho(command, log)
       exitCode <- IO(Process(command, workingDir, env: _*) ! processLogger)
@@ -354,7 +368,7 @@ class AutoBump(repository: OutdatedRepository, token: String) {
       log.info(line)
       lines.append(line)
     }
-    val stderr = { (line: String) =>
+    val stderr = { line: String =>
       if (merge) log.info(line) else log.error(line)
       lines.append(line)
     }

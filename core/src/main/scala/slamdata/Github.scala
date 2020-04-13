@@ -33,22 +33,31 @@ class Github[F[_]: ConcurrentEffect](accessToken: Option[String], timeout: Optio
   implicit val client: HttpClient[F] = new HttpClient[F](timeout.getOrElse(Duration(1000L, MILLISECONDS)))
   implicit val at: Option[String] = accessToken
 
-  val pullRequests: PullRequests[F] = new PullRequestsInterpreter[F](new github4s.interpreters.PullRequestsInterpreter[F])
+  val pullRequests: PullRequests[F]      = new PullRequestsInterpreter[F](
+      new github4s.interpreters.PullRequestsInterpreter[F],
+      client,
+      accessToken)
   val users: Users[F]                    = new UsersInterpreter[F]
   val repos: Repositories[F]             = new RepositoriesInterpreter[F]
   val auth: Auth[F]                      = new AuthInterpreter[F]
   val gists: Gists[F]                    = new GistsInterpreter[F]
   val issues: Issues[F]                  = new IssuesInterpreter[F]
   val activities: Activities[F]          = new ActivitiesInterpreter[F]
-  val gitData: GitData[F]                = new GitDataInterpreter[F](new github4s.interpreters.GitDataInterpreter[F])
+  val gitData: GitData[F]                = new GitDataInterpreter[F](
+      new github4s.interpreters.GitDataInterpreter[F],
+      client,
+      accessToken)
   val organizations: Organizations[F]    = new OrganizationsInterpreter[F]
   val teams: Teams[F]                    = new TeamsInterpreter[F]
 }
 
 object Github {
 
-  def apply[F[_]: ConcurrentEffect](accessToken: Option[String] = None, timeout: Option[Duration] = None)
-                                   (implicit ec: ExecutionContext): Github[F] =
+  def apply[F[_]: ConcurrentEffect](
+      accessToken: Option[String] = None,
+      timeout: Option[Duration] = None)(
+      implicit ec: ExecutionContext)
+      : Github[F] =
     new Github[F](accessToken, timeout)
 
 }
