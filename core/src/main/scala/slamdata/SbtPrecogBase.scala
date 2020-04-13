@@ -231,7 +231,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         WorkflowStep.Use(
           "actions",
           "setup-ruby",
-          1,
+          "v1",
           name = Some("Install Ruby"),
           params = Map("ruby-version" -> "2.6")),
 
@@ -256,7 +256,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
           WorkflowStep.Use(
             "actions",
             "setup-ruby",
-            1,
+            "v1",
             name = Some("Install Ruby"),
             params = Map("ruby-version" -> "2.6")),
           WorkflowStep.Sbt(
