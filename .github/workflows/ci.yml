@@ -10,6 +10,7 @@ name: Continuous Integration
 on:
   pull_request:
     branches: [master, backport/v*]
+    types: [opened, reopened, synchronize, ready_for_review]
   push:
     branches: [master, backport/v*]
 
@@ -23,6 +24,7 @@ env:
 jobs:
   build:
     name: Build and Test
+    if: '!(github.event_name == ''pull_request'' && github.event.pull_request.draft)'
     strategy:
       matrix:
         os: [ubuntu-latest]
