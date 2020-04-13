@@ -219,6 +219,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
 
+      githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
+
       githubWorkflowBuildPreamble +=
         WorkflowStep.Sbt(
           List("transferCommonResources", "exportSecretsForActions"),
@@ -268,7 +270,16 @@ abstract class SbtPrecogBase extends AutoPlugin {
           WorkflowStep.Run(List("./scripts/checkAndAutoMerge"))),
         cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')"),
         needs = List("build"),
-        scalas = List(scalaVersion.value)))
+        scalas = List(scalaVersion.value)),
+
+      githubWorkflowGeneratedCI := {
+        githubWorkflowGeneratedCI.value map { job =>
+          if (job.id == "build")
+            job.copy(cond = Some("!(github.event_name == 'pull_request' && github.event.pull_request.draft)"))
+          else
+            job
+        }
+      })
 
     implicit final class ProjectSyntax(val self: Project) {
       def evictToLocal(envar: String, subproject: String, test: Boolean = false): Project = {
