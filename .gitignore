@@ -6,6 +6,8 @@ tags
 
 /core/src/main/resources/core/common-secrets.yml
 
+.graphqlconfig
+
 # sbt-slamdata common resources
 /scripts/bumpDependentProject
 /scripts/checkAndAutoMerge
