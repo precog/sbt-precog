@@ -97,6 +97,7 @@ object AutoBump {
   val AutoBumpLabel = ":robot:"
   val PullRequestFilters: List[PRFilter] = List(PRFilterOpen, PRFilterSortCreated, PRFilterOrderAsc, PRFilterBase("master"))
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
+  val PerPage = 100
 
   def autoBumpCommitTitle(author: String): String = s"Applied dependency updates by $author"
 
@@ -120,7 +121,7 @@ object AutoBump {
       uri <- Uri.fromString(url).toSeq
       page <- uri.params.get("page")
       pageNum <- Try(page.toInt).toOption
-      perPage <- uri.params.get("per_page")
+      perPage <- uri.params.get("per_page").orElse(Some(PerPage.toString)) // Add a default, just in case
       perPageNum <- Try(perPage.toInt).toOption
     } yield (relation, (pageNum, perPageNum))
     relations.toMap
@@ -160,6 +161,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   val sbt: String = sys.env.getOrElse("SBT", "sbt")
   val authenticated = s"https://_:$token@github.com/$owner/$repoSlug"
 
+  // TODO: check whether PR is mergeable?
   /**
    * Finds primary open autobump pull request, if one exists.
    *
@@ -175,7 +177,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   }
 
   def getPullRequests: Stream[IO, PullRequestDraft] = {
-    autoPage(Pagination(1, 100)) { pagination =>
+    autoPage(Pagination(1, PerPage)) { pagination =>
       github.pullRequests.listDraftPullRequests(owner, repoSlug, PullRequestFilters, Some(pagination))
     }
   }
@@ -186,18 +188,21 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   }
 
   def draftPullRequest(authorRepository: String, branchName: String, changes: String): IO[PullRequestDraft] = {
-    github
-      .pullRequests
-      .draftPullRequest(
-        owner,
-        repoSlug,
-        NewPullRequestData(
-          autoBumpCommitTitle(authorRepository),
-          s"This PR brought to you by sbt-trickle via $authorRepository. Changes:\n\n$changes"),
-        branchName,
-        "master")
-      .rethrow
-      .map(_.result)
+    for {
+      response <- github
+        .pullRequests
+        .draftPullRequest(
+          owner,
+          repoSlug,
+          NewPullRequestData(
+            autoBumpCommitTitle(authorRepository),
+            s"This PR brought to you by sbt-trickle via $authorRepository. Changes:\n\n$changes"),
+          branchName,
+          "master")
+        .rethrow
+      pr = response.result
+      _ <- assignLabel(AutoBumpLabel, pr).rethrow
+    } yield pr
   }
 
   def assignLabel(label: String, pullRequest: PullRequestDraft): IO[GHResponse[List[Label]]] = {
