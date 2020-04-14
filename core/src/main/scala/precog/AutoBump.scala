@@ -80,13 +80,14 @@ object AutoBump {
     val order: Map[ChangeLabel, Int] = values.zipWithIndex.toMap
     implicit val ordering: Order[ChangeLabel] = Order.by(order)
     val fromString: Map[String, ChangeLabel] = values.map(change => change.label -> change).toMap
-    val labelPattern: Regex = values.mkString("|").r
+    val labelPattern: Regex = values.map(_.label).mkString("|").r
 
     def apply(label: String): Option[ChangeLabel] = {
       fromString.get(label)
     }
 
-    def unapply(arg: String): Option[ChangeLabel] = labelPattern.findFirstIn(arg).flatMap(apply)
+    def unapply(arg: String): Option[ChangeLabel] =
+      labelPattern.findFirstIn(arg).flatMap(apply)
   }
 
   implicit class UnpackSyntax[F[_]: Monad, A](response: F[GHResponse[A]]) {
@@ -96,7 +97,6 @@ object AutoBump {
   val AutoBumpLabel = ":robot:"
   val PullRequestFilters: List[PRFilter] = List(PRFilterOpen, PRFilterSortCreated, PRFilterOrderAsc, PRFilterBase("master"))
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
-  val LabelPattern: Regex = "version: \\w+".r
 
   def autoBumpCommitTitle(author: String): String = s"Applied dependency updates by $author"
 
