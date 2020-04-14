@@ -180,26 +180,31 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-target
+          path: target
 
       - name: Download target directory 'plugin/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
           name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-plugin_target
+          path: plugin/target
 
       - name: Download target directory 'artifact/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
           name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-artifact_target
+          path: artifact/target
 
       - name: Download target directory 'core/target' (2.12.10)
         uses: actions/download-artifact@v1
         with:
           name: target-${{ matrix.os }}-2.12.10-${{ matrix.java }}-core_target
+          path: core/target
 
       - name: Download target directory 'project/target'
         uses: actions/download-artifact@v1
         with:
           name: target-${{ matrix.os }}-${{ matrix.java }}-project_target
+          path: project/target
 
       - name: Install Ruby
         uses: actions/setup-ruby@v1

@@ -17,7 +17,6 @@
 package precog.algebras
 
 import github4s.GithubResponses.GHResponse
-import github4s.domain.Ref
 
 trait GitData[F[_]] extends github4s.algebras.GitData[F] {
   /**
