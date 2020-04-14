@@ -16,28 +16,43 @@
 
 package precog
 
+import org.scalacheck.{Arbitrary, Gen}
+import org.specs2.execute.ResultImplicits
 import org.specs2.mutable.Specification
 
-class AutoBumpSpec extends Specification {
+import cats.effect.IO
+import cats.implicits._
+import github4s.GithubResponses.{GHException, GHResult, UnexpectedException}
+import github4s.domain.{Label, Pagination, PullRequestBase}
+import precog.domain.PullRequestDraft
+
+class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultImplicits {
+  val log = sbt.util.LogExchange.logger("test")
 
   "ChangeLabel" should {
     import AutoBump.ChangeLabel
+    def abChangeLabelGen: Gen[ChangeLabel] = Gen.oneOf(ChangeLabel.values)
+    implicit def abChangeLabel: Arbitrary[ChangeLabel] = Arbitrary(abChangeLabelGen)
 
-    "deserialize" in {
-      ChangeLabel("version: revision") mustEqual Some(ChangeLabel.Revision)
-      ChangeLabel("version: feature") mustEqual Some(ChangeLabel.Feature)
-      ChangeLabel("version: breaking") mustEqual Some(ChangeLabel.Breaking)
+    "include all values" in {
+      ChangeLabel.values.toSet mustEqual Set(ChangeLabel.Revision, ChangeLabel.Feature, ChangeLabel.Breaking)
     }
 
-    "deserialize with pattern recognition" in {
-      "version: revision" must beLike {
-        case ChangeLabel(ChangeLabel.Revision) => ok
-      }
-      "version: feature" must beLike {
-        case ChangeLabel(ChangeLabel.Feature) => ok
-      }
-      "version: breaking" must beLike {
-        case ChangeLabel(ChangeLabel.Breaking) => ok
+    "implement equality" in prop { (a: ChangeLabel, b: ChangeLabel) =>
+      a mustEqual a
+      (a mustNotEqual b) <==> !a.eq(b)
+      (a mustEqual b) <==> a.eq(b)
+    }
+
+    "deserialize" in {
+      ChangeLabel("version: revision") must beSome(ChangeLabel.Revision)
+      ChangeLabel("version: feature") must beSome(ChangeLabel.Feature)
+      ChangeLabel("version: breaking") must beSome(ChangeLabel.Breaking)
+    }
+
+    "deserialize with pattern recognition" in prop { (prefix: String, cl: ChangeLabel, suffix: String) =>
+      prefix + cl.label + suffix must beLike {
+        case ChangeLabel(changeLabel) => cl mustEqual changeLabel
       }
     }
 
@@ -48,6 +63,180 @@ class AutoBumpSpec extends Specification {
     }
 
     "be ordered" in {
+      Set(ChangeLabel.Revision, ChangeLabel.Feature).max mustEqual (ChangeLabel.Feature)
+      Set(ChangeLabel.Revision, ChangeLabel.Breaking).max mustEqual (ChangeLabel.Breaking)
+      Set(ChangeLabel.Feature, ChangeLabel.Breaking).max mustEqual (ChangeLabel.Breaking)
+    }
+  }
+
+  "AutoBump Object" should {
+    import AutoBump._
+    "extract label" in {
+      val lines =
+        """
+          |[info] Loading settings for project sbt-precog4454409616373722978-build from build.sbt,plugins.sbt ...
+          |[info] Loading project definition from /tmp/sbt-precog4454409616373722978/project
+          |[warn] There may be incompatibilities among your library dependencies; run 'evicted' to see detailed eviction warnings.
+          |[info] Compiling 2 Scala sources to /tmp/sbt-precog4454409616373722978/project/target/scala-2.12/sbt-1.0/classes ...
+          |[info] Done compiling.
+          |[info] Loading settings for project root from version.sbt,build.sbt ...
+          |[info] looking for workflow definition in /tmp/sbt-precog4454409616373722978/.github/workflows
+          |[info] Set current project to root (in build file:/tmp/sbt-precog4454409616373722978/)
+          |[info] Updated revision precog-tectonic 11.0.16 -> 11.0.17
+          |[info] version: revision
+          |[success] Total time: 1 s, completed Apr 14, 2020 6:10:03 PM
+          |""".stripMargin.split('\n').toList
+      val label = extractLabel(lines)
+
+      label mustEqual ChangeLabel.Revision
+    }
+
+    "extract changes" in {
+      val lines =
+        """
+          |[info] Loading settings for project sbt-precog4454409616373722978-build from build.sbt,plugins.sbt ...
+          |[info] Loading project definition from /tmp/sbt-precog4454409616373722978/project
+          |[warn] There may be incompatibilities among your library dependencies; run 'evicted' to see detailed eviction warnings.
+          |[info] Compiling 2 Scala sources to /tmp/sbt-precog4454409616373722978/project/target/scala-2.12/sbt-1.0/classes ...
+          |[info] Done compiling.
+          |[info] Loading settings for project root from version.sbt,build.sbt ...
+          |[info] looking for workflow definition in /tmp/sbt-precog4454409616373722978/.github/workflows
+          |[info] Set current project to root (in build file:/tmp/sbt-precog4454409616373722978/)
+          |[info] Updated revision precog-tectonic 11.0.16 -> 11.0.17
+          |[info] Updated revision precog-qdata 14.0.20 -> 14.0.23
+          |[info] version: revision
+          |[success] Total time: 1 s, completed Apr 14, 2020 6:10:03 PM
+          |""".stripMargin.split('\n').toList
+      val changes = extractChanges(lines)
+
+      changes mustEqual List(
+        "Updated revision precog-tectonic 11.0.16 -> 11.0.17",
+        "Updated revision precog-qdata 14.0.20 -> 14.0.23")
+    }
+
+    "get next page" in {
+      val headersWithNext = Map(
+        "Link" ->
+          """
+            |<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next",
+            |  <https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34>; rel="last"
+            |""".stripMargin.split('\n').mkString
+      )
+
+      nextPage(getRelations(headersWithNext)) must beSome(Pagination(2, 100))
+
+      val headersWithoutNext = Map(
+        "Link" ->
+          """
+            |<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=33>; rel="prev",
+            |  <https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34>; rel="last"
+            |""".stripMargin.split('\n').mkString
+      )
+
+      nextPage(getRelations(headersWithoutNext)) must beNone
+
+      val headersWithPerPage = Map(
+        "Link" ->
+          """
+            |<https://api.github.com/search/code?q=addClass+user%3Amozilla&per_page=50&page=2>;
+            | rel="next",
+            |  <https://api.github.com/search/code?q=addClass+user%3Amozilla&per_page=50&page=20>;
+            |  rel="last"
+            |""".stripMargin.split('\n').mkString
+      )
+
+      nextPage(getRelations(headersWithPerPage)) must beSome(Pagination(2,50))
+    }
+
+    "autopage" in {
+      val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
+        case Pagination(page, perPage) =>
+          val chunk = (page until perPage).toList
+          val nextPage = perPage + chunk.size + 4
+          val headers = if (page < 10) Map(
+            "Link" ->
+              s"""
+                 |<https://api.github.com/nothing/really?page=${perPage}
+                 |&per_page=${nextPage}>; rel="next"
+                 |""".stripMargin.split('\n').mkString
+          ) else Map.empty[String, String]
+          IO.pure(GHResult(chunk, 200, headers).asRight[GHException])
+      }
+      val stream = autoPage(Pagination(1, 5))(chunker)
+
+      stream.compile.toList.unsafeRunSync() mustEqual List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    }
+
+    "return error on failure when autopaging" in {
+      val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
+        case Pagination(page, perPage) =>
+          val chunk = (page until perPage).toList
+          val nextPage = perPage + chunk.size + 4
+          val headers = if (page < 10) Map(
+            "Link" ->
+              s"""
+                 |<https://api.github.com/nothing/really?page=${perPage}
+                 |&per_page=${nextPage}>; rel="next"
+                 |""".stripMargin.split('\n').mkString
+          ) else Map.empty[String, String]
+          if (page > 1) IO.pure(UnexpectedException("test").asLeft)
+          else IO.pure(GHResult(chunk, 200, headers).asRight)
+      }
+      val stream = autoPage(Pagination(1, 5))(chunker)
+
+      stream.compile.toList.attempt.unsafeRunSync() must beLeft
+    }
+
+    "get existing pull request branch" in {
+      val pr = PullRequestDraft(10, 5, "sha1", "open", "Test PR", None, false, false, "html",
+        "yesterday", None, None, None, None,
+        Some(PullRequestBase(None, "master", "sha3", None, None)),
+        Some(PullRequestBase(None, "trickle/test", "sha2", None, None)),
+        None, None)
+
+      getBranch(Some(pr)).unsafeRunSync() mustEqual ("" -> "trickle/test")
+    }
+
+    "get new branch" in {
+      getBranch(None).unsafeRunSync() must beLike {
+        case ("-b", branch) => branch must beMatching("trickle/version-bump-\\d+".r)
+      }
+
+      val b1 = getBranch(None).unsafeRunSync()
+      Thread.sleep(10)
+      val b2 = getBranch(None).unsafeRunSync()
+      b1 mustNotEqual b2
+    }
+
+    "identify autobump pull request" in {
+      val pr = PullRequestDraft(10, 5, "sha1", "open", "Test PR", None, false, false, "html",
+        "yesterday", None, None, None, None,
+        Some(PullRequestBase(None, "master", "sha3", None, None)),
+        Some(PullRequestBase(None, "trickle/test", "sha2", None, None)),
+        None, None)
+
+      def toLabel: String => Label =
+        Label(None, _, "https://api.github.com/label/none", "#ff0000", None)
+
+      val labels = List(ChangeLabel.Revision.label, AutoBumpLabel, "dev-verify")
+        .map(toLabel)
+
+      AutoBumpLabel mustEqual ":robot:"
+
+      isAutoBump(pr, labels) must beTrue
+      isAutoBump(pr, labels.filterNot(_.name == AutoBumpLabel)) must beFalse
+      isAutoBump(pr, Nil) must beFalse
+      isAutoBump(pr.copy(head = pr.base), labels) must beFalse
+      isAutoBump(pr.copy(draft = true), labels) must beTrue
+    }
+  }
+
+  "AutoBump" should {
+    "create pull requests that it identifies as its own" in {
+      todo
+    }
+
+    "create pull requests with a version label" in {
       todo
     }
   }
