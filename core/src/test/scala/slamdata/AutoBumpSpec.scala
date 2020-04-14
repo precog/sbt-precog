@@ -22,20 +22,29 @@ class AutoBumpSpec extends Specification {
 
   "ChangeLabel" should {
     import AutoBump.ChangeLabel
+
     "deserialize" in {
       ChangeLabel("version: revision") mustEqual Some(ChangeLabel.Revision)
       ChangeLabel("version: feature") mustEqual Some(ChangeLabel.Feature)
       ChangeLabel("version: breaking") mustEqual Some(ChangeLabel.Breaking)
     }
 
+    "deserialize with pattern recognition" in {
+      "version: revision" must beLike {
+        case ChangeLabel(ChangeLabel.Revision) => ok
+      }
+      "version: feature" must beLike {
+        case ChangeLabel(ChangeLabel.Feature) => ok
+      }
+      "version: breaking" must beLike {
+        case ChangeLabel(ChangeLabel.Breaking) => ok
+      }
+    }
+
     "serialize" in {
       ChangeLabel.Revision.label mustEqual "version: revision"
       ChangeLabel.Feature.label mustEqual "version: feature"
       ChangeLabel.Breaking.label mustEqual "version: breaking"
-    }
-
-    "pattern match" in {
-      todo
     }
 
     "be ordered" in {
