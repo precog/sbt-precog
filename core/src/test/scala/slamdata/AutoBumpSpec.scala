@@ -18,20 +18,20 @@ package precog
 
 import org.specs2.mutable.Specification
 
-class AutoBumpTest extends Specification {
+class AutoBumpSpec extends Specification {
 
   "ChangeLabel" should {
     import AutoBump.ChangeLabel
     "deserialize" in {
-      ChangeLabel("version: revision") === Some(ChangeLabel.Revision)
-      ChangeLabel("version: feature") === Some(ChangeLabel.Feature)
-      ChangeLabel("version: breaking") === Some(ChangeLabel.Breaking)
+      ChangeLabel("version: revision") mustEqual Some(ChangeLabel.Revision)
+      ChangeLabel("version: feature") mustEqual Some(ChangeLabel.Feature)
+      ChangeLabel("version: breaking") mustEqual Some(ChangeLabel.Breaking)
     }
 
     "serialize" in {
-      ChangeLabel.Revision.label === "version: revision"
-      ChangeLabel.Feature.label === "version: feature"
-      ChangeLabel.Breaking.label === "version: breaking"
+      ChangeLabel.Revision.label mustEqual "version: revision"
+      ChangeLabel.Feature.label mustEqual "version: feature"
+      ChangeLabel.Breaking.label mustEqual "version: breaking"
     }
 
     "pattern match" in {
