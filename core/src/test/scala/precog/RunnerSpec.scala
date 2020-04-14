@@ -28,28 +28,28 @@ class RunnerSpec extends org.specs2.mutable.Specification {
   "Fluent builders" should {
     "be equivalent to case class build" in {
       val runner = Runner[IO](log)
-      runner === Runner[IO](log, false, None, Map.empty, Seq.empty)
-      runner.stderrToStdout === Runner[IO](log, merge = true)
-      runner.cd(file("./target")) === Runner[IO](log, workingDir = Some(file("./target")))
-      runner.withEnv("X" -> "Y", "W" -> "Z") === Runner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
-      runner.hide("password") === Runner[IO](log, hide = Seq("password"))
+      runner mustEqual Runner[IO](log, false, None, Map.empty, Seq.empty)
+      runner.stderrToStdout mustEqual Runner[IO](log, merge = true)
+      runner.cd(file("./target")) mustEqual Runner[IO](log, workingDir = Some(file("./target")))
+      runner.withEnv("X" -> "Y", "W" -> "Z") mustEqual Runner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
+      runner.hide("password") mustEqual Runner[IO](log, hide = Seq("password"))
     }
 
     "append instead of replace" in {
-      Runner[IO](log).withEnv("X" -> "Y").withEnv("W" -> "Z") === Runner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
-      Runner[IO](log).hide("xyzzy").hide("foobar") === Runner[IO](log, hide = Seq("xyzzy", "foobar"))
+      Runner[IO](log).withEnv("X" -> "Y").withEnv("W" -> "Z") mustEqual Runner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
+      Runner[IO](log).hide("xyzzy").hide("foobar") mustEqual Runner[IO](log, hide = Seq("xyzzy", "foobar"))
     }
   }
 
   "exclamation mark operator" should {
     "return captured output" in {
       val runner = Runner[IO](log)
-      (runner ! Seq("bash", "-c", "echo 'abc'")).unsafeRunSync() === List("abc")
+      (runner ! Seq("bash", "-c", "echo 'abc'")).unsafeRunSync() mustEqual List("abc")
     }
 
     "break string by spaces" in {
       val runner = Runner[IO](log)
-      (runner ! "printf %s%d abc 5").unsafeRunSync() === List("abc5")
+      (runner ! "printf %s%d abc 5").unsafeRunSync() mustEqual List("abc5")
     }
 
     "respect working directory" in {
@@ -64,12 +64,12 @@ class RunnerSpec extends org.specs2.mutable.Specification {
 
     "hide stuff" in {
       val runner = Runner[IO](log).hide("xyzzy")
-      (runner ! "printf abc%sdef xyzzy").unsafeRunSync() === List("abc*****def")
+      (runner ! "printf abc%sdef xyzzy").unsafeRunSync() mustEqual List("abc*****def")
     }.pendingUntilFixed("must capture logger")
 
     "pass environment variables" in {
       val runner = Runner[IO](log).withEnv("X" -> "Y")
-      (runner ! Seq("bash", "-c", "echo $X")).unsafeRunSync() === List("Y")
+      (runner ! Seq("bash", "-c", "echo $X")).unsafeRunSync() mustEqual List("Y")
     }
 
     "merge log" in {
@@ -84,17 +84,17 @@ class RunnerSpec extends org.specs2.mutable.Specification {
   "question mark operator" should {
     "return exit code" in {
       val runner = Runner[IO](log)
-      (runner ? Seq("bash", "-c", "exit 0")).unsafeRunSync() === 0
-      (runner ? Seq("bash", "-c", "exit 1")).unsafeRunSync() === 1
-      (runner ? Seq("bash", "-c", "exit 2")).unsafeRunSync() === 2
+      (runner ? Seq("bash", "-c", "exit 0")).unsafeRunSync() mustEqual 0
+      (runner ? Seq("bash", "-c", "exit 1")).unsafeRunSync() mustEqual 1
+      (runner ? Seq("bash", "-c", "exit 2")).unsafeRunSync() mustEqual 2
     }
 
     "capture output with processLogger" in {
       val runner = Runner[IO](log)
       val buffer = collection.mutable.Buffer[String]()
       val plog = ProcessLogger(line => buffer.append(line))
-      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() === 0
-      buffer.toList === List("abc")
+      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() mustEqual 0
+      buffer.toList mustEqual List("abc")
     }
   }
 
@@ -104,10 +104,10 @@ class RunnerSpec extends org.specs2.mutable.Specification {
       val buffer = collection.mutable.Buffer[String]()
       val plog = runner.getProcessLogger(Some(buffer), None)
 
-      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() === 0
-      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() === 0
+      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() mustEqual 0
+      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() mustEqual 0
 
-      buffer.toList === List("abc")
+      buffer.toList mustEqual List("abc")
     }
 
     "capture stderr" in {
@@ -115,10 +115,10 @@ class RunnerSpec extends org.specs2.mutable.Specification {
       val buffer = collection.mutable.Buffer[String]()
       val plog = runner.getProcessLogger(None, Some(buffer))
 
-      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() === 0
-      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() === 0
+      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() mustEqual 0
+      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() mustEqual 0
 
-      buffer.toList === List("xyzzy")
+      buffer.toList mustEqual List("xyzzy")
     }
 
     "join stdout and stderr as needed" in {
@@ -126,38 +126,38 @@ class RunnerSpec extends org.specs2.mutable.Specification {
       val buffer = collection.mutable.Buffer[String]()
       val plog = runner.getProcessLogger(Some(buffer), Some(buffer))
 
-      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() === 0
-      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() === 0
+      (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() mustEqual 0
+      (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() mustEqual 0
 
-      buffer.toList === List("abc", "xyzzy")
+      buffer.toList mustEqual List("abc", "xyzzy")
     }
   }
 
   "safeEcho" should {
     "replace strings to be hidden" in {
       val runner = Runner[IO](log).hide("xyzzy").hide("foobar")
-      Runner.SecretReplacement === "*****"
-      runner.safeEcho(Seq("this", "xyzzy", "that", "print_foobar")) === "this ***** that print_*****"
+      Runner.SecretReplacement mustEqual "*****"
+      runner.safeEcho(Seq("this", "xyzzy", "that", "print_foobar")) mustEqual "this ***** that print_*****"
     }
   }
 
   "quoteIfNeeded" should {
     "quote strings with spaces" in {
-      Runner.quoteIfNeeded(" abc") === "' abc'"
-      Runner.quoteIfNeeded("abc ") === "'abc '"
-      Runner.quoteIfNeeded("a b c") === "'a b c'"
+      Runner.quoteIfNeeded(" abc") mustEqual "' abc'"
+      Runner.quoteIfNeeded("abc ") mustEqual "'abc '"
+      Runner.quoteIfNeeded("a b c") mustEqual "'a b c'"
     }
     "quote strings with symbols" in {
-      Runner.quoteIfNeeded("!?") === "'!?'"
+      Runner.quoteIfNeeded("!?") mustEqual "'!?'"
     }
     "leave words and numbers unquoted" in {
-      Runner.quoteIfNeeded("abc") === "abc"
-      Runner.quoteIfNeeded("plus4") === "plus4"
-      Runner.quoteIfNeeded("foo_bar") === "foo_bar"
+      Runner.quoteIfNeeded("abc") mustEqual "abc"
+      Runner.quoteIfNeeded("plus4") mustEqual "plus4"
+      Runner.quoteIfNeeded("foo_bar") mustEqual "foo_bar"
     }
     "leave paths unquoted" in {
-      Runner.quoteIfNeeded("/home/user/.bashrc") === "/home/user/.bashrc"
-      Runner.quoteIfNeeded("C:\\Users") === "C:\\Users"
+      Runner.quoteIfNeeded("/home/user/.bashrc") mustEqual "/home/user/.bashrc"
+      Runner.quoteIfNeeded("C:\\Users") mustEqual "C:\\Users"
     }
   }
 
