@@ -252,16 +252,18 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     for {
       dir <- IO(Files.createTempDirectory("sbt-precog"))
       dirFile = dir.toFile
-      _ <- Runner[IO](log) ! s"git clone --depth 1 $authenticated ${dirFile.getPath}"
+      _ <- Runner[IO](log).hide(token).stderrToStdout !
+        s"git clone --depth 1 --no-single-branch $authenticated ${dirFile.getPath}"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      runner = Runner[IO](log).cd(dirFile)
-      _ <- runner ! s"git checkout $flag $branchName"
-      lines <- runner ! s"$sbt trickleUpdateDependencies"
+      sbtRunner = Runner[IO](log).cd(dirFile).hide(token)
+      gitRunner = sbtRunner.stderrToStdout
+      _ <- gitRunner ! s"git checkout $flag $branchName"
+      lines <- sbtRunner ! s"$sbt trickleUpdateDependencies"
       changes = extractChanges(lines)
       label = extractLabel(lines)
-      _ <- runner ! s"$sbt trickleIsUpToDate"
-      updateResult <- (runner.stderrToStdout ! s"$sbt update").attempt
+      _ <- sbtRunner ! s"$sbt trickleIsUpToDate"
+      updateResult <- (sbtRunner.stderrToStdout ! s"$sbt update").attempt
     } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
   }
 
@@ -269,6 +271,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   def tryCommit(dirFile: File): IO[Either[Warnings, Unit]] = {
     val runner = Runner[IO](log)
       .cd(dirFile)
+      .hide(token)
       .stderrToStdout
       .withEnv(
         "GIT_AUTHOR_NAME" -> s"Precog Bot ($authorRepository)",
@@ -282,7 +285,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   }
 
   def tryPush(dirFile: File, branchName: String): IO[Either[Warnings, Unit]] = {
-    val runner = Runner[IO](log).cd(dirFile).stderrToStdout
+    val runner = Runner[IO](log).cd(dirFile).hide(token).stderrToStdout
     (runner ! s"git push origin $branchName")
       .void
       .attempt
