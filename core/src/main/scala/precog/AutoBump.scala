@@ -39,16 +39,27 @@ import scala.util.Try
 import scala.util.matching.Regex
 
 object AutoBump {
+
   sealed trait Warnings extends Product with Serializable {
     def warn(log: Logger): IO[Unit]
   }
+
   object Warnings {
+
+    case object NoLabel extends Warnings {
+      def warn(log: Logger): IO[Unit] = IO {
+        log.warn("Change label not found!")
+        log.warn("Either the repository is already up-to-date, or it needs a custom trickleUpdateDependencies")
+      }
+    }
+
     case object UpdateError extends Warnings {
       def warn(log: Logger): IO[Unit] = IO {
         log.warn("was unable to run `sbt update` following the trickle application")
         log.warn("this may mean that the some artifacts are not yet propagated; skipping")
       }
     }
+
     case object NoChangesError extends Warnings {
       def warn(log: Logger): IO[Unit] = IO {
         log.warn("git-commit exited with error")
@@ -56,12 +67,14 @@ object AutoBump {
         log.warn("you should check for a stuck trickle PR on that repository")
       }
     }
+
     case object PushError extends Warnings {
       def warn(log: Logger): IO[Unit] = IO {
         log.warn("git-push exited with error")
         log.warn("this usually means some other repository updated the pull request before this one")
       }
     }
+
     final case class NotOldest(maybeOldest: Option[PullRequestDraft], draft: PullRequestDraft) extends Warnings {
       def warn(log: Logger): IO[Unit] = IO {
         maybeOldest match {
@@ -69,7 +82,7 @@ object AutoBump {
             log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
             log.warn("this usually means two or more repositories finished build at the same time,")
             log.warn("and some other repository beat this one to pull request creation.")
-          case None =>
+          case None         =>
             log.warn(s"pull request ${draft.number} was not found")
             log.warn("this usually means that it was merged before we could update it")
             log.warn("check that it was closed manually or merged")
@@ -116,7 +129,7 @@ object AutoBump {
     val chunker: Option[Pagination] => F[Option[(Chunk[T], Option[Pagination])]] = {
       case Some(pagination) =>
         call(pagination).rethrow.map(res => Option(Chunk.seq(res.result) -> nextPage(getRelations(res.headers))))
-      case None =>
+      case None             =>
         Sync[F].pure(None)
     }
     Stream.unfoldChunkEval(Option(first))(chunker)
@@ -141,11 +154,15 @@ object AutoBump {
   }
 
   /** Extract change label from trickleUpdateDependencies log */
-  def extractLabel(lines: List[String]): ChangeLabel = {
+  def extractLabel(lines: List[String]): IO[Either[Warnings, ChangeLabel]] = IO {
     lines collectFirst {
       case ChangeLabel(label) => label
-    } getOrElse sys.error("Change label not found!")
+    } match {
+      case Some(label) => label.asRight
+      case None        => Warnings.NoLabel.asLeft
+    }
   }
+
 
   /** Extract updated versions from trickleUpdateDependencies log */
   def extractChanges(lines: List[String]): List[String] = {
@@ -264,28 +281,34 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
 
   def tryUpdateDependencies: IO[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
     for {
-      dir <- IO(Files.createTempDirectory("sbt-precog"))
-      file = dir.toFile
+      path <- IO(Files.createTempDirectory("sbt-precog"))
+      dir = path.toFile
       _ <- Runner[IO](log).hide(token).stderrToStdout !
-        s"git clone --depth 1 --no-single-branch $authenticated ${file.getPath}"
+        s"git clone --depth 1 --no-single-branch $authenticated ${dir.getPath}"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      sbtRunner = Runner[IO](log).cd(file).hide(token)
-      gitRunner = sbtRunner.stderrToStdout
-      _ <- gitRunner ! s"git checkout $flag $branchName"
-      sbt <- getSbt(file)
-      lines <- sbtRunner ! s"$sbt trickleUpdateDependencies"
+      runner = Runner[IO](log).cd(dir).hide(token)
+      _ <- runner.stderrToStdout ! s"git checkout $flag $branchName"
+      sbt <- getSbt(dir)
+      lines <- runner ! s"$sbt trickleUpdateDependencies"
       changes = extractChanges(lines)
-      label = extractLabel(lines)
-      _ <- sbtRunner ! s"$sbt trickleIsUpToDate"
-      updateResult <- (sbtRunner.stderrToStdout ! s"$sbt update").attempt
-    } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (file, branchName, oldestPullRequest, changes, label))
+      maybeLabel <- extractLabel(lines)
+    } yield maybeLabel.map(label => (dir, branchName, oldestPullRequest, changes, label))
+  }
+
+  def verifyUpdateDependencies(dir: File): IO[Either[Warnings, Unit]] = {
+    val runner = Runner[IO](log).cd(dir).hide(token)
+    for {
+      sbt <- getSbt(dir)
+      _ <- runner ! s"$sbt trickleIsUpToDate"
+      updateResult <- (runner.stderrToStdout ! s"$sbt update").attempt
+    } yield updateResult.leftMap(_ => Warnings.UpdateError).void
   }
 
   // TODO: add changes to commit message?
-  def tryCommit(dirFile: File): IO[Either[Warnings, Unit]] = {
+  def tryCommit(dir: File): IO[Either[Warnings, Unit]] = {
     val runner = Runner[IO](log)
-      .cd(dirFile)
+      .cd(dir)
       .hide(token)
       .stderrToStdout
       .withEnv(
@@ -299,8 +322,8 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     } yield result.leftMap(_ => Warnings.NoChangesError)
   }
 
-  def tryPush(dirFile: File, branchName: String): IO[Either[Warnings, Unit]] = {
-    val runner = Runner[IO](log).cd(dirFile).hide(token).stderrToStdout
+  def tryPush(dir: File, branchName: String): IO[Either[Warnings, Unit]] = {
+    val runner = Runner[IO](log).cd(dir).hide(token).stderrToStdout
     (runner ! s"git push origin $branchName")
       .void
       .attempt
@@ -352,6 +375,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   def createPullRequest(): IO[Boolean] = {
     val app = for {
       (dir, branchName, maybePullRequest, changes, label) <- EitherT(tryUpdateDependencies)
+      _ <- EitherT(verifyUpdateDependencies(dir))
       _ <- EitherT(tryCommit(dir))
       _ <- EitherT(tryPush(dir, branchName))
       pullRequest <- EitherT(createOrUpdatePullRequest(branchName, changes, label, maybePullRequest))
