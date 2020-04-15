@@ -15,6 +15,8 @@ libraryDependencies ++= Seq(
 
 scalacOptions += "-Ypartial-unification"
 
+Test / testOptions += Tests.Argument("tmpdir", (target.value / "tests" / "tmp").getPath)
+
 enablePlugins(GraphQLCodegenPlugin)
 
 graphqlCodegenSchema := (Compile / resourceDirectory).value / "core" / "schema.graphql"

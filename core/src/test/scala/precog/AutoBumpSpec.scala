@@ -16,8 +16,12 @@
 
 package precog
 
+import java.io.File
+import java.nio.file.{Files, Path}
+
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.execute.ResultImplicits
+import org.specs2.main.CommandLine
 import org.specs2.mutable.Specification
 
 import cats.effect.IO
@@ -26,8 +30,14 @@ import github4s.GithubResponses.{GHException, GHResult, UnexpectedException}
 import github4s.domain.{Label, Pagination, PullRequestBase}
 import precog.domain.PullRequestDraft
 
-class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultImplicits {
+class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.ScalaCheck with ResultImplicits {
   val log = sbt.util.LogExchange.logger("test")
+  val tmpdir: Path = params.value("tmpdir") map { f =>
+    val file = new File(f, getClass.getName.replace('.', '/'))
+    file.mkdirs()
+    file.toPath.pp("tmpdir: ")
+  } getOrElse Files.createTempDirectory(getClass.getSimpleName).pp("tmpdir: ")
+
 
   "ChangeLabel" should {
     import AutoBump.ChangeLabel
