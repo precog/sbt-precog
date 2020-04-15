@@ -20,17 +20,18 @@ import java.nio.file.Files
 
 import org.http4s.Uri
 
-import cats.{Monad, Order}
 import cats.data.EitherT
 import cats.effect.IO.contextShift
 import cats.effect.{ContextShift, IO, Sync}
 import cats.implicits._
+import cats.{Monad, Order}
+import fs2.{Chunk, Stream}
 import github4s.GithubResponses.{GHException, GHResponse, GHResult}
 import github4s.domain._
 import precog.domain.{PullRequestDraft, PullRequestUpdate}
-import sbt.{Logger, url}
+import sbt.url
+import sbt.util.Logger
 import sbttrickle.metadata.OutdatedRepository
-import fs2.{Chunk, Stream}
 
 import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -160,6 +161,20 @@ object AutoBump {
   def isAutoBump(pullRequest: PullRequestDraft, labels: List[Label]): Boolean = {
     pullRequest.head.exists(_.ref.startsWith("trickle/")) && labels.exists(_.name == AutoBumpLabel)
   }
+
+  /** Use SBT environment variable, but, if relative path, check for existence or fallback */
+  def getSbt(dir: File): IO[String] = IO {
+    val fallback = "sbt"
+    sys.env.get("SBT") match {
+      case Some(path) if new File(path).isAbsolute => path
+      case Some(path) if path.contains('/')        =>
+        val file = new File(dir, path)
+        if (file.exists() && file.canExecute()) path
+        else fallback
+      case Some(path)                              => path
+      case None                                    => fallback
+    }
+  }
 }
 
 class AutoBump(authorRepository: String, repository: OutdatedRepository, token: String, log: Logger) {
@@ -170,7 +185,6 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   implicit private val IOContextShift: ContextShift[IO] = contextShift(global)
   val github: Github[IO] = Github[IO](Some(token))
   val (owner, repoSlug) = repository.ownerAndRepository.getOrElse(sys.error(s"invalid url ${repository.url}"))
-  val sbt: String = sys.env.getOrElse("SBT", "sbt")
   val authenticated = s"https://_:$token@github.com/$owner/$repoSlug"
 
   // TODO: check whether PR is mergeable?
@@ -251,20 +265,21 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   def tryUpdateDependencies: IO[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
     for {
       dir <- IO(Files.createTempDirectory("sbt-precog"))
-      dirFile = dir.toFile
+      file = dir.toFile
       _ <- Runner[IO](log).hide(token).stderrToStdout !
-        s"git clone --depth 1 --no-single-branch $authenticated ${dirFile.getPath}"
+        s"git clone --depth 1 --no-single-branch $authenticated ${file.getPath}"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      sbtRunner = Runner[IO](log).cd(dirFile).hide(token)
+      sbtRunner = Runner[IO](log).cd(file).hide(token)
       gitRunner = sbtRunner.stderrToStdout
       _ <- gitRunner ! s"git checkout $flag $branchName"
+      sbt <- getSbt(file)
       lines <- sbtRunner ! s"$sbt trickleUpdateDependencies"
       changes = extractChanges(lines)
       label = extractLabel(lines)
       _ <- sbtRunner ! s"$sbt trickleIsUpToDate"
       updateResult <- (sbtRunner.stderrToStdout ! s"$sbt update").attempt
-    } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (dirFile, branchName, oldestPullRequest, changes, label))
+    } yield updateResult.bimap(_ => Warnings.UpdateError, _ => (file, branchName, oldestPullRequest, changes, label))
   }
 
   // TODO: add changes to commit message?

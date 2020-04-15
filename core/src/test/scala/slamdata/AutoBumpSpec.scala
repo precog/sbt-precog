@@ -230,6 +230,10 @@ class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultI
       isAutoBump(pr.copy(head = pr.base), labels) must beFalse
       isAutoBump(pr.copy(draft = true), labels) must beTrue
     }
+
+    "get sbt" in {
+      todo
+    }
   }
 
   "AutoBump" should {
