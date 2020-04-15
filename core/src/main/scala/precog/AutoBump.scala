@@ -61,11 +61,18 @@ object AutoBump {
         log.warn("this usually means some other repository updated the pull request before this one")
       }
     }
-    final case class NotOldest(oldest: PullRequestDraft, draft: PullRequestDraft) extends Warnings {
+    final case class NotOldest(maybeOldest: Option[PullRequestDraft], draft: PullRequestDraft) extends Warnings {
       def warn(log: Logger): IO[Unit] = IO {
-        log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
-        log.warn("this usually means two or more repositories finished build at the same time,")
-        log.warn("and some other repository beat this one to pull request creation.")
+        maybeOldest match {
+          case Some(oldest) =>
+            log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
+            log.warn("this usually means two or more repositories finished build at the same time,")
+            log.warn("and some other repository beat this one to pull request creation.")
+          case None =>
+            log.warn(s"pull request ${draft.number} was not found")
+            log.warn("this usually means that it was merged before we could update it")
+            log.warn("check that it was closed manually or merged")
+        }
       }
     }
   }
@@ -105,8 +112,13 @@ object AutoBump {
       first: Pagination)(
       call: Pagination => F[Either[GHException, GHResult[List[T]]]])
       : Stream[F, T] = {
-    val chunker = call.andThen(_.rethrow.map(res => nextPage(getRelations(res.headers)).map(Chunk.seq(res.result) -> _)))
-    Stream.unfoldChunkEval(first)(chunker)
+    val chunker: Option[Pagination] => F[Option[(Chunk[T], Option[Pagination])]] = {
+      case Some(pagination) =>
+        call(pagination).rethrow.map(res => Option(Chunk.seq(res.result) -> nextPage(getRelations(res.headers))))
+      case None =>
+        Sync[F].pure(None)
+    }
+    Stream.unfoldChunkEval(Option(first))(chunker)
   }
 
   def nextPage(relations: Map[String, (Int, Int)]): Option[Pagination] = {
@@ -282,12 +294,18 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     _ <- IO(log.info(s"Marked $owner/$repoSlug#${pullRequest.number} ready for review"))
   } yield pullRequest.asRight[Warnings]
 
-  def ifNotOldest(oldest: PullRequestDraft, pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
-    _ <- close(pullRequest, s"${pullRequest.title} (preceded by #${oldest.number})")
-    _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number}, preceded by $owner/$repoSlug#${oldest.number}"))
-    _ <- deleteBranch(pullRequest)
-    _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
-  } yield Warnings.NotOldest(oldest, pullRequest).asLeft[PullRequestDraft]
+  def ifNotOldest(
+      maybeOldest: Option[PullRequestDraft],
+      pullRequest: PullRequestDraft)
+      : IO[Either[Warnings, PullRequestDraft]] = {
+    val issue = maybeOldest.map(o => s"preceded by #$o").getOrElse("not found")
+    for {
+      _ <- close(pullRequest, s"${pullRequest.title} ($issue)")
+      _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number} ($issue)"))
+      _ <- deleteBranch(pullRequest)
+      _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
+    } yield Warnings.NotOldest(maybeOldest, pullRequest).asLeft[PullRequestDraft]
+  }
 
   // TODO: Update pull request description?
   def createOrUpdatePullRequest(
@@ -308,9 +326,8 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
       _ <- if (prChangeLabels.contains(highestChange)) IO.unit else assignLabel(highestChange.label, pullRequest)
       _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
       oldestPullRequest <- getOldestAutoBumpPullRequest
-      res <- oldestPullRequest
-        .filter(_.number == pullRequest.number)
-        .fold(ifOldest(pullRequest))(ifNotOldest(_, pullRequest))
+      res <- if (oldestPullRequest.exists(_.number == pullRequest.number)) ifOldest(pullRequest)
+      else ifNotOldest(oldestPullRequest, pullRequest)
     } yield res
   }
 
