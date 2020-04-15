@@ -86,9 +86,34 @@ class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultI
           |[info] version: revision
           |[success] Total time: 1 s, completed Apr 14, 2020 6:10:03 PM
           |""".stripMargin.split('\n').toList
-      val label = extractLabel(lines)
+      val label = extractLabel(lines).unsafeRunSync()
 
-      label mustEqual ChangeLabel.Revision
+      label must beRight(ChangeLabel.Revision)
+    }
+
+    "warn if no label exists" in {
+      val lines =
+        """
+          |[info] Loading global plugins from /Users/dcsobral/.sbt/1.0/plugins
+          |[info] Loading settings for project sbt-precog8555711038951371949-build from plugins.sbt ...
+          |[info] Loading project definition from
+          | /private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/project
+          |[warn] There may be incompatibilities among your library dependencies; run 'evicted' to
+          | see detailed eviction warnings.
+          |[info] Loading settings for project sbt-precog8555711038951371949 from build.sbt ...
+          |[info] Set current project to electron (in build
+          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          |[info] Set current project to electron (in build
+          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          |[info] Reapplying settings...
+          |[info] Set current project to electron (in build
+          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          |[success] Total time: 3 s, completed Apr 15, 2020 12:25:43 AM
+          |""".stripMargin.split('\n').toList
+
+      val label = extractLabel(lines).unsafeRunSync()
+
+      label must beLeft(Warnings.NoLabel)
     }
 
     "extract changes" in {
@@ -229,6 +254,10 @@ class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultI
       isAutoBump(pr, Nil) must beFalse
       isAutoBump(pr.copy(head = pr.base), labels) must beFalse
       isAutoBump(pr.copy(draft = true), labels) must beTrue
+    }
+
+    "get sbt" in {
+      todo
     }
   }
 
