@@ -358,7 +358,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     for {
       pullRequest <- (maybePullRequest fold {
         draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
-          .flatTap(pullRequest => IO(log.info(s"Opened $owner/$repoSlug#${pullRequest.number}")))
+          .flatTap(pullRequest => IO(log.info(s"Opened ${pullRequest.html_url}")))
       })(IO.pure)
       labels <- getLabels(pullRequest.number)
       prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
