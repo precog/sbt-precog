@@ -112,8 +112,13 @@ object AutoBump {
       first: Pagination)(
       call: Pagination => F[Either[GHException, GHResult[List[T]]]])
       : Stream[F, T] = {
-    val chunker = call.andThen(_.rethrow.map(res => nextPage(getRelations(res.headers)).map(Chunk.seq(res.result) -> _)))
-    Stream.unfoldChunkEval(first)(chunker)
+    val chunker: Option[Pagination] => F[Option[(Chunk[T], Option[Pagination])]] = {
+      case Some(pagination) =>
+        call(pagination).rethrow.map(res => Option(Chunk.seq(res.result) -> nextPage(getRelations(res.headers))))
+      case None =>
+        Sync[F].pure(None)
+    }
+    Stream.unfoldChunkEval(Option(first))(chunker)
   }
 
   def nextPage(relations: Map[String, (Int, Int)]): Option[Pagination] = {

@@ -149,22 +149,23 @@ class AutoBumpSpec extends Specification with org.specs2.ScalaCheck with ResultI
     }
 
     "autopage" in {
+      val list = (1 to 10).toList
       val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
         case Pagination(page, perPage) =>
-          val chunk = (page until perPage).toList
-          val nextPage = perPage + chunk.size + 4
-          val headers = if (page < 10) Map(
+          val chunk = list.slice((page - 1) * perPage, page * perPage)
+          val nextPage = page + 1
+          val headers = if (list.size > page * perPage) Map(
             "Link" ->
               s"""
-                 |<https://api.github.com/nothing/really?page=${perPage}
-                 |&per_page=${nextPage}>; rel="next"
+                 |<https://api.github.com/nothing/really?page=${nextPage}
+                 |&per_page=${perPage}>; rel="next"
                  |""".stripMargin.split('\n').mkString
           ) else Map.empty[String, String]
           IO.pure(GHResult(chunk, 200, headers).asRight[GHException])
       }
-      val stream = autoPage(Pagination(1, 5))(chunker)
+      val stream = autoPage(Pagination(1, 3))(chunker)
 
-      stream.compile.toList.unsafeRunSync() mustEqual List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+      stream.compile.toList.unsafeRunSync() mustEqual List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     }
 
     "return error on failure when autopaging" in {
