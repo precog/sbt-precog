@@ -52,7 +52,7 @@ class PullRequestsInterpreter[F[_] : Sync](
       case NewPullRequestIssue(issue)      => DraftPullRequestIssue(issue, head, base, maintainerCanModify)
     }
     client
-      .post[DraftPullRequest, PullRequestDraft](accessToken, s"repos/$owner/$repo/pulls", draftHeaders, data)
+      .post[DraftPullRequest, PullRequestDraft](accessToken, f"repos/$owner%s/$repo%s/pulls", draftHeaders, data)
   }
 
   def listDraftPullRequests(
@@ -64,7 +64,7 @@ class PullRequestsInterpreter[F[_] : Sync](
       : F[GHResponse[List[PullRequestDraft]]] = {
     val draftHeaders: Map[String, String] = headers + draftHeader
     client.get[List[PullRequestDraft]](
-      accessToken, s"repos/$owner/$repo/pulls", draftHeaders, filters.map(_.tupled).toMap, pagination)
+      accessToken, f"repos/$owner%s/$repo%s/pulls", draftHeaders, filters.map(_.tupled).toMap, pagination)
   }
 
   def updatePullRequest(
@@ -75,7 +75,11 @@ class PullRequestsInterpreter[F[_] : Sync](
       headers: Map[String, String])
       : F[GHResponse[PullRequestDraft]] = {
     val draftHeaders: Map[String, String] = headers + draftHeader
-    client.patch[PullRequestUpdate, PullRequestDraft](accessToken, s"repos/$owner/$repo/pulls/$number", draftHeaders, fields)
+    client.patch[PullRequestUpdate, PullRequestDraft](
+      accessToken,
+      f"repos/$owner%s/$repo%s/pulls/$number",
+      draftHeaders,
+      fields)
   }
 
   def markReadyForReview(

@@ -29,6 +29,7 @@ import fs2.{Chunk, Stream}
 import github4s.GithubResponses.{GHException, GHResponse, GHResult}
 import github4s.domain._
 import precog.domain.{PullRequestDraft, PullRequestUpdate}
+import precog.interpreters.SyncRunner
 import sbt.url
 import sbt.util.Logger
 import sbttrickle.metadata.OutdatedRepository
@@ -79,11 +80,11 @@ object AutoBump {
       def warn(log: Logger): IO[Unit] = IO {
         maybeOldest match {
           case Some(oldest) =>
-            log.warn(s"pull request ${draft.number} is newer than existing pull request ${oldest.number}")
+            log.warn(f"pull request ${draft.number}%d is newer than existing pull request ${oldest.number}%d")
             log.warn("this usually means two or more repositories finished build at the same time,")
             log.warn("and some other repository beat this one to pull request creation.")
           case None         =>
-            log.warn(s"pull request ${draft.number} was not found")
+            log.warn(f"pull request ${draft.number}%d was not found")
             log.warn("this usually means that it was merged before we could update it")
             log.warn("check that it was closed manually or merged")
         }
@@ -120,7 +121,7 @@ object AutoBump {
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
   val PerPage = 100
 
-  def autoBumpCommitTitle(author: String): String = s"Applied dependency updates by $author"
+  def autoBumpCommitTitle(author: String): String = f"Applied dependency updates by $author%s"
 
   def autoPage[F[_]: Sync, T](
       first: Pagination)(
@@ -172,7 +173,7 @@ object AutoBump {
   def getBranch(pullRequest: Option[PullRequestDraft]): IO[(String, String)] = IO {
     pullRequest
       .map("" -> _.head.get.ref)
-      .getOrElse("-b" -> s"trickle/version-bump-${System.currentTimeMillis()}")
+      .getOrElse("-b" -> f"trickle/version-bump-${System.currentTimeMillis()}%d")
   }
 
   def isAutoBump(pullRequest: PullRequestDraft, labels: List[Label]): Boolean = {
@@ -201,8 +202,8 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
 
   implicit private val IOContextShift: ContextShift[IO] = contextShift(global)
   val github: Github[IO] = Github[IO](Some(token))
-  val (owner, repoSlug) = repository.ownerAndRepository.getOrElse(sys.error(s"invalid url ${repository.url}"))
-  val authenticated = s"https://_:$token@github.com/$owner/$repoSlug"
+  val (owner, repoSlug) = repository.ownerAndRepository.getOrElse(sys.error(f"invalid url ${repository.url}%s"))
+  val authenticated = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
 
   // TODO: check whether PR is mergeable?
   /**
@@ -239,7 +240,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
           repoSlug,
           NewPullRequestData(
             autoBumpCommitTitle(authorRepository),
-            s"This PR brought to you by sbt-trickle via $authorRepository. Changes:\n\n$changes"),
+            f"This PR brought to you by sbt-trickle via $authorRepository%s. Changes:\n\n$changes%s"),
           branchName,
           "master")
         .rethrow
@@ -259,7 +260,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
       .pullRequests
       .markReadyForReview(owner, repoSlug, pullRequest.node_id)
       .rethrow
-      .ensure(new RuntimeException(s"Failed to mark pull request ${pullRequest.number} ready for review"))(_.result)
+      .ensure(new RuntimeException(f"Failed to mark pull request ${pullRequest.number}%d ready for review"))(_.result)
       .void
   }
 
@@ -270,7 +271,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
 
   def deleteBranch(pullRequest: PullRequestDraft): IO[Unit] = {
     (pullRequest.head map { base =>
-      val branch = s"refs/heads/${base.ref}"
+      val branch = f"refs/heads/${base.ref}%s"
       github.gitData.deleteReference(owner, repoSlug, branch).rethrow
     }).sequence.void
   }
@@ -283,48 +284,48 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     for {
       path <- IO(Files.createTempDirectory("sbt-precog"))
       dir = path.toFile
-      _ <- Runner[IO](log).hide(token).stderrToStdout !
-        s"git clone --depth 1 --no-single-branch $authenticated ${dir.getPath}"
+      _ <- SyncRunner[IO](log).hide(token).stderrToStdout !
+        f"git clone --depth 1 --no-single-branch $authenticated%s ${dir.getPath}%s"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      runner = Runner[IO](log).cd(dir).hide(token)
-      _ <- runner.stderrToStdout ! s"git checkout $flag $branchName"
+      runner = SyncRunner[IO](log).cd(dir).hide(token)
+      _ <- runner.stderrToStdout ! f"git checkout $flag%s $branchName%s"
       sbt <- getSbt(dir)
-      lines <- runner ! s"$sbt trickleUpdateDependencies"
+      lines <- runner ! f"$sbt%s trickleUpdateDependencies"
       changes = extractChanges(lines)
       maybeLabel <- extractLabel(lines)
     } yield maybeLabel.map(label => (dir, branchName, oldestPullRequest, changes, label))
   }
 
   def verifyUpdateDependencies(dir: File): IO[Either[Warnings, Unit]] = {
-    val runner = Runner[IO](log).cd(dir).hide(token)
+    val runner = SyncRunner[IO](log).cd(dir).hide(token)
     for {
       sbt <- getSbt(dir)
-      _ <- runner ! s"$sbt trickleIsUpToDate"
-      updateResult <- (runner.stderrToStdout ! s"$sbt update").attempt
+      _ <- runner ! f"$sbt%s trickleIsUpToDate"
+      updateResult <- (runner.stderrToStdout ! f"$sbt%s update").attempt
     } yield updateResult.leftMap(_ => Warnings.UpdateError).void
   }
 
   // TODO: add changes to commit message?
   def tryCommit(dir: File): IO[Either[Warnings, Unit]] = {
-    val runner = Runner[IO](log)
+    val runner = SyncRunner[IO](log)
       .cd(dir)
       .hide(token)
       .stderrToStdout
       .withEnv(
-        "GIT_AUTHOR_NAME" -> s"Precog Bot ($authorRepository)",
+        "GIT_AUTHOR_NAME" -> f"Precog Bot ($authorRepository%s)",
         "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
-        "GIT_COMMITTER_NAME" -> s"Precog Bot ($authorRepository)",
+        "GIT_COMMITTER_NAME" -> f"Precog Bot ($authorRepository%s)",
         "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
     for {
-      _ <- runner ! s"git add ."
+      _ <- runner ! "git add ."
       result <- (runner ! Seq("git", "commit", "-m", autoBumpCommitTitle(authorRepository))).void.attempt
     } yield result.leftMap(_ => Warnings.NoChangesError)
   }
 
   def tryPush(dir: File, branchName: String): IO[Either[Warnings, Unit]] = {
-    val runner = Runner[IO](log).cd(dir).hide(token).stderrToStdout
-    (runner ! s"git push origin $branchName")
+    val runner = SyncRunner[IO](log).cd(dir).hide(token).stderrToStdout
+    (runner ! f"git push origin $branchName%s")
       .void
       .attempt
       .map(_.leftMap(_ => Warnings.PushError))
@@ -332,19 +333,19 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
 
   def ifOldest(pullRequest: PullRequestDraft): IO[Either[Warnings, PullRequestDraft]] = for {
     _ <- markReady(pullRequest)
-    _ <- IO(log.info(s"Marked $owner/$repoSlug#${pullRequest.number} ready for review"))
+    _ <- IO(log.info(f"Marked $owner%s/$repoSlug%s#${pullRequest.number}%d ready for review"))
   } yield pullRequest.asRight[Warnings]
 
   def ifNotOldest(
       maybeOldest: Option[PullRequestDraft],
       pullRequest: PullRequestDraft)
       : IO[Either[Warnings, PullRequestDraft]] = {
-    val issue = maybeOldest.map(o => s"preceded by #$o").getOrElse("not found")
+    val issue = maybeOldest.map(o => f"preceded by #${o.number}%d").getOrElse("not found")
     for {
-      _ <- close(pullRequest, s"${pullRequest.title} ($issue)")
-      _ <- IO(log.info(s"Closed $owner/$repoSlug#${pullRequest.number} ($issue)"))
+      _ <- close(pullRequest, f"${pullRequest.title}%s ($issue%s)")
+      _ <- IO(log.info(f"Closed $owner%s/$repoSlug%s#${pullRequest.number}%d ($issue%s)"))
       _ <- deleteBranch(pullRequest)
-      _ <- IO(log.info(s"Removed branch ${pullRequest.base.map(_.ref)} from $owner/$repoSlug"))
+      _ <- IO(log.info(f"Removed branch ${pullRequest.base.map(_.ref)}%s from $owner%s/$repoSlug%s"))
     } yield Warnings.NotOldest(maybeOldest, pullRequest).asLeft[PullRequestDraft]
   }
 
@@ -358,7 +359,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     for {
       pullRequest <- (maybePullRequest fold {
         draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
-          .flatTap(pullRequest => IO(log.info(s"Opened ${pullRequest.html_url}")))
+          .flatTap(pullRequest => IO(log.info(f"Opened ${pullRequest.html_url}%s")))
       })(IO.pure)
       labels <- getLabels(pullRequest.number)
       prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet

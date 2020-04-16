@@ -393,7 +393,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         val log = streams.value.log
         val plogger = ProcessLogger(log.info(_), log.error(_))
 
-        if (sys.env.get("ENCRYPTION_PASSWORD").isEmpty) {
+        if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
           sys.error("$ENCRYPTION_PASSWORD not set")
         }
 
@@ -425,7 +425,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
   def crypt(operation: String, destFile: String => String): Initialize[InputTask[Unit]] = Def.inputTask {
     val log = streams.value.log
 
-    if (sys.env.get("ENCRYPTION_PASSWORD").isEmpty) {
+    if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
       log.error("ENCRYPTION_PASSWORD not set")
       sys.error("$ENCRYPTION_PASSWORD not set")
     }
