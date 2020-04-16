@@ -145,8 +145,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
       val changes = extractChanges(lines)
 
       changes mustEqual List(
-        "Updated revision precog-tectonic 11.0.16 -> 11.0.17",
-        "Updated revision precog-qdata 14.0.20 -> 14.0.23")
+        "Updated **revision** precog-tectonic `11.0.16` → `11.0.17`",
+        "Updated **revision** precog-qdata `14.0.20` → `14.0.23`")
     }
 
     "get next page" in {
