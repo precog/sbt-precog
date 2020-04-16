@@ -18,6 +18,7 @@ package precog.interpreters
 
 import cats.effect.Sync
 import cats.implicits._
+import com.github.ghik.silencer.silent
 import github4s.GithubResponses.GHResponse
 import github4s.domain._
 import github4s.http.HttpClient
@@ -158,6 +159,7 @@ object PullRequestsInterpreter {
   final case class GithubQuery[A <: GraphQLQuery](query: A, variables: A#Variables)
   object GithubQuery {
     implicit def encodeGraphQLQuery[A <: GraphQLQuery]: Encoder[A] = Encoder.encodeString.contramap[A](_.document.renderCompact)
+    @silent // varsEnc used by macro
     implicit def encodeGithubQuery[A <: GraphQLQuery](implicit varsEnc: Encoder[A#Variables]): Encoder[GithubQuery[A]] =
       deriveEncoder[GithubQuery[A]]
   }
@@ -165,6 +167,7 @@ object PullRequestsInterpreter {
   /** Representation of the json data returned by github graphql queries. */
   final case class GithubResponse[A <: GraphQLQuery](data: A#Data)
   object GithubResponse {
+    @silent // dataDec used by macro
     implicit def decodeGithubResponse[A <: GraphQLQuery](implicit dataDec: Decoder[A#Data]): Decoder[GithubResponse[A]] =
       deriveDecoder[GithubResponse[A]]
   }

@@ -34,7 +34,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
   val log = sbt.util.LogExchange.logger("test")
   val tmpdir: Path = params.value("tmpdir") map { f =>
     val file = new File(f, getClass.getName.replace('.', '/'))
-    file.mkdirs()
+    sbt.io.IO.delete(file)
+    assert(file.mkdirs())
     file.toPath.pp("tmpdir: ")
   } getOrElse Files.createTempDirectory(getClass.getSimpleName).pp("tmpdir: ")
 
@@ -96,7 +97,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
           |[info] version: revision
           |[success] Total time: 1 s, completed Apr 14, 2020 6:10:03 PM
           |""".stripMargin.split('\n').toList
-      val label = extractLabel(lines).unsafeRunSync()
+      val label = extractLabel(lines)
 
       label must beRight(ChangeLabel.Revision)
     }
@@ -121,7 +122,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
           |[success] Total time: 3 s, completed Apr 15, 2020 12:25:43 AM
           |""".stripMargin.split('\n').toList
 
-      val label = extractLabel(lines).unsafeRunSync()
+      val label = extractLabel(lines)
 
       label must beLeft(Warnings.NoLabel)
     }

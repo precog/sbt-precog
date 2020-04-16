@@ -21,21 +21,19 @@ import java.nio.file.Files
 import org.http4s.Uri
 
 import cats.data.EitherT
-import cats.effect.IO.contextShift
-import cats.effect.{ContextShift, IO, Sync}
+import cats.effect.{IO, Sync}
 import cats.implicits._
 import cats.{Monad, Order}
 import fs2.{Chunk, Stream}
 import github4s.GithubResponses.{GHException, GHResponse, GHResult}
 import github4s.domain._
-import precog.domain.{PullRequestDraft, PullRequestUpdate}
-import precog.interpreters.SyncRunner
+import precog.algebras._
+import precog.domain._
 import sbt.url
 import sbt.util.Logger
 import sbttrickle.metadata.OutdatedRepository
 
 import scala.collection.immutable.Seq
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import scala.util.matching.Regex
 
@@ -155,7 +153,7 @@ object AutoBump {
   }
 
   /** Extract change label from trickleUpdateDependencies log */
-  def extractLabel(lines: List[String]): IO[Either[Warnings, ChangeLabel]] = IO {
+  def extractLabel(lines: List[String]): Either[Warnings, ChangeLabel] = {
     lines collectFirst {
       case ChangeLabel(label) => label
     } match {
@@ -200,14 +198,19 @@ object AutoBump {
   }
 }
 
-class AutoBump(authorRepository: String, repository: OutdatedRepository, token: String, log: Logger) {
+class AutoBump(
+    authorRepository: String,
+    repository: OutdatedRepository,
+    token: String,
+    github: Github[IO],
+    cmdRunner: Runner[IO],
+    log: Logger) {
   import AutoBump._
 
   assert(url(repository.url).getHost == "github.com")
 
-  implicit private val IOContextShift: ContextShift[IO] = contextShift(global)
-  val github: Github[IO] = Github[IO](Some(token))
-  val (owner, repoSlug) = repository.ownerAndRepository.getOrElse(sys.error(f"invalid url ${repository.url}%s"))
+  val (owner, repoSlug) = repository.ownerAndRepository
+    .getOrElse(sys.error(f"invalid url ${repository.url}%s"))
   val authenticated = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
 
   // TODO: check whether PR is mergeable?
@@ -289,21 +292,21 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
     for {
       path <- IO(Files.createTempDirectory("sbt-precog"))
       dir = path.toFile
-      _ <- SyncRunner[IO](log).hide(token).stderrToStdout !
+      _ <- cmdRunner.hide(token).stderrToStdout !
         f"git clone --depth 1 --no-single-branch $authenticated%s ${dir.getPath}%s"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      runner = SyncRunner[IO](log).cd(dir).hide(token)
+      runner = cmdRunner.cd(dir).hide(token)
       _ <- runner.stderrToStdout ! f"git checkout $flag%s $branchName%s"
       sbt <- getSbt(dir)
       lines <- runner ! f"$sbt%s trickleUpdateDependencies"
       changes = extractChanges(lines)
-      maybeLabel <- extractLabel(lines)
+      maybeLabel = extractLabel(lines)
     } yield maybeLabel.map(label => (dir, branchName, oldestPullRequest, changes, label))
   }
 
   def verifyUpdateDependencies(dir: File): IO[Either[Warnings, Unit]] = {
-    val runner = SyncRunner[IO](log).cd(dir).hide(token)
+    val runner = cmdRunner.cd(dir).hide(token)
     for {
       sbt <- getSbt(dir)
       _ <- runner ! f"$sbt%s trickleIsUpToDate"
@@ -313,7 +316,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
 
   // TODO: add changes to commit message?
   def tryCommit(dir: File): IO[Either[Warnings, Unit]] = {
-    val runner = SyncRunner[IO](log)
+    val runner = cmdRunner
       .cd(dir)
       .hide(token)
       .stderrToStdout
@@ -329,7 +332,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   }
 
   def tryPush(dir: File, branchName: String): IO[Either[Warnings, Unit]] = {
-    val runner = SyncRunner[IO](log).cd(dir).hide(token).stderrToStdout
+    val runner = cmdRunner.cd(dir).hide(token).stderrToStdout
     (runner ! f"git push origin $branchName%s")
       .void
       .attempt

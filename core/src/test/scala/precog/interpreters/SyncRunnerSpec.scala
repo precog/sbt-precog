@@ -33,7 +33,8 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
   val log = Logger.Null
   val tmpdir: Path = params.value("tmpdir") map { f =>
     val file = new File(f, getClass.getName.replace('.', '/'))
-    file.mkdirs()
+    sbt.io.IO.delete(file)
+    assert(file.mkdirs())
     file.toPath.pp("tmpdir: ")
   } getOrElse Files.createTempDirectory(getClass.getSimpleName).pp("tmpdir: ")
 
