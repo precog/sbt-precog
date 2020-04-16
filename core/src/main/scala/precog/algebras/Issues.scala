@@ -16,31 +16,6 @@
 
 package precog.algebras
 
-import github4s.algebras.{Activities, Auth, Gists, Organizations, Repositories, Teams, Users}
-
-trait Github[F[_]] {
-
-  def pullRequests: PullRequests[F]
-
-  def users: Users[F]
-
-  def repos: Repositories[F]
-
-  def auth: Auth[F]
-
-  def gists: Gists[F]
-
-  def issues: github4s.algebras.Issues[F]
-
-  def activities: Activities[F]
-
-  def gitData: GitData[F]
-
-  def organizations: Organizations[F]
-
-  def teams: Teams[F]
-}
-
-object Github {
-  def apply[F[_]](implicit github: Github[F]): Github[F] = github
+object Issues {
+  def apply[F[_]](implicit issues: github4s.algebras.Issues[F]): github4s.algebras.Issues[F] = issues
 }

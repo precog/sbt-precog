@@ -55,3 +55,7 @@ trait PullRequests[F[_]] extends github4s.algebras.PullRequests[F] {
    */
   def markReadyForReview(owner: String, repo: String, id: String, headers: Map[String, String] = Map()): F[GHResponse[Boolean]]
 }
+
+object PullRequests {
+  def apply[F[_]](implicit pullRequests: PullRequests[F]): PullRequests[F] = pullRequests
+}

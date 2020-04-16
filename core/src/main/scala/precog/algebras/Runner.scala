@@ -101,3 +101,7 @@ trait Runner[F[_]] {
    */
   def ?(command: Seq[String], processLogger: ProcessLogger): F[Int]
 }
+
+object Runner {
+  def apply[F[_]](implicit runner: Runner[F]): Runner[F] = runner
+}

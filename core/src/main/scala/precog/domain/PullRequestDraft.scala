@@ -40,7 +40,7 @@ case class PullRequestDraft(id: Int,
 
 object PullRequestDraft {
   implicit class ToPullRequestSyntax(pr: PullRequestDraft) {
-    def toPullRequest(pr: PullRequestDraft): PullRequest = PullRequest(
+    def toPullRequest: PullRequest = PullRequest(
       id = pr.id,
       number = pr.number,
       state = pr.state,

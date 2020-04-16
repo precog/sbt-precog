@@ -74,9 +74,9 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
     }
 
     "be ordered" in {
-      Set(ChangeLabel.Revision, ChangeLabel.Feature).max mustEqual (ChangeLabel.Feature)
-      Set(ChangeLabel.Revision, ChangeLabel.Breaking).max mustEqual (ChangeLabel.Breaking)
-      Set(ChangeLabel.Feature, ChangeLabel.Breaking).max mustEqual (ChangeLabel.Breaking)
+      Set(ChangeLabel.Revision, ChangeLabel.Feature).max mustEqual ChangeLabel.Feature
+      Set(ChangeLabel.Revision, ChangeLabel.Breaking).max mustEqual ChangeLabel.Breaking
+      Set(ChangeLabel.Feature, ChangeLabel.Breaking).max mustEqual ChangeLabel.Breaking
     }
   }
 
@@ -108,17 +108,17 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
           |[info] Loading global plugins from /Users/dcsobral/.sbt/1.0/plugins
           |[info] Loading settings for project sbt-precog8555711038951371949-build from plugins.sbt ...
           |[info] Loading project definition from
-          | /private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/project
+          | /private/var/folders/cl/3tsn535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/project
           |[warn] There may be incompatibilities among your library dependencies; run 'evicted' to
           | see detailed eviction warnings.
           |[info] Loading settings for project sbt-precog8555711038951371949 from build.sbt ...
           |[info] Set current project to electron (in build
-          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          | file:/private/var/folders/cl/3tsn535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
           |[info] Set current project to electron (in build
-          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          | file:/private/var/folders/cl/3tsn535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
           |[info] Reapplying settings...
           |[info] Set current project to electron (in build
-          | file:/private/var/folders/cl/3tsnm535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
+          | file:/private/var/folders/cl/3tsn535351gs04s8b0v9qdm0000gn/T/sbt-precog8555711038951371949/)
           |[success] Total time: 3 s, completed Apr 15, 2020 12:25:43 AM
           |""".stripMargin.split('\n').toList
 
@@ -184,7 +184,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
       nextPage(getRelations(headersWithPerPage)) must beSome(Pagination(2,50))
     }
 
-    "autopage" in {
+    "auto paginate" in {
       val list = (1 to 10).toList
       val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
         case Pagination(page, perPage) =>
@@ -193,8 +193,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
           val headers = if (list.size > page * perPage) Map(
             "Link" ->
               s"""
-                 |<https://api.github.com/nothing/really?page=${nextPage}
-                 |&per_page=${perPage}>; rel="next"
+                 |<https://api.github.com/nothing/really?page=$nextPage
+                 |&per_page=$perPage>; rel="next"
                  |""".stripMargin.split('\n').mkString
           ) else Map.empty[String, String]
           IO.pure(GHResult(chunk, 200, headers).asRight[GHException])
@@ -204,7 +204,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
       stream.compile.toList.unsafeRunSync() mustEqual List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     }
 
-    "return error on failure when autopaging" in {
+    "return error on failure when auto paginating" in {
       val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
         case Pagination(page, perPage) =>
           val chunk = (page until perPage).toList
@@ -212,8 +212,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
           val headers = if (page < 10) Map(
             "Link" ->
               s"""
-                 |<https://api.github.com/nothing/really?page=${perPage}
-                 |&per_page=${nextPage}>; rel="next"
+                 |<https://api.github.com/nothing/really?page=$perPage
+                 |&per_page=$nextPage>; rel="next"
                  |""".stripMargin.split('\n').mkString
           ) else Map.empty[String, String]
           if (page > 1) IO.pure(UnexpectedException("test").asLeft)
@@ -231,17 +231,17 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
         Some(PullRequestBase(None, "trickle/test", "sha2", None, None)),
         None, None)
 
-      getBranch(Some(pr)).unsafeRunSync() mustEqual ("" -> "trickle/test")
+      getBranch[IO](Some(pr)).unsafeRunSync() mustEqual ("" -> "trickle/test")
     }
 
     "get new branch" in {
-      getBranch(None).unsafeRunSync() must beLike {
+      getBranch[IO](None).unsafeRunSync() must beLike {
         case ("-b", branch) => branch must beMatching("trickle/version-bump-\\d+".r)
       }
 
-      val b1 = getBranch(None).unsafeRunSync()
+      val b1 = getBranch[IO](None).unsafeRunSync()
       Thread.sleep(10)
-      val b2 = getBranch(None).unsafeRunSync()
+      val b2 = getBranch[IO](None).unsafeRunSync()
       b1 mustNotEqual b2
     }
 

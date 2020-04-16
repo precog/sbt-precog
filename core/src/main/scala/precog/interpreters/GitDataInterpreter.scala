@@ -31,7 +31,7 @@ class GitDataInterpreter [F[_] : Sync](
     extends GitData[F] {
   def deleteReference(owner: String, repo: String, ref: String, headers: Map[String, String]): F[GHResponse[Unit]] = {
     for {
-      _ <- implicitly[Sync[F]].delay(assert(ref.matches("refs/(heads|tags)/.+"), f"Invalid reference $ref%s"))
+      _ <- Sync[F].delay(assert(ref.matches("refs/(heads|tags)/.+"), f"Invalid reference $ref%s"))
       res <- client.delete(accessToken, f"repos/$owner%s/$repo%s/git/$ref%s")
     } yield res
   }
