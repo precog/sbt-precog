@@ -167,7 +167,12 @@ object AutoBump {
 
   /** Extract updated versions from trickleUpdateDependencies log */
   def extractChanges(lines: List[String]): List[String] = {
-    lines.filter(_ contains "Updated ").map(line => line.substring(line.indexOf("Updated ")))
+    lines.filter(_ contains "Updated ") map { line =>
+      line.substring(line.indexOf("Updated "))
+        .replaceFirst("(breaking|feature|revision)", "**$1**")
+        .replaceFirst("->", "→")
+        .replaceAll("""(\d+\.\d+\.\d+(?:-[a-f0-9]+)?)""", "`$1`")
+    }
   }
 
   def getBranch(pullRequest: Option[PullRequestDraft]): IO[(String, String)] = IO {
@@ -240,7 +245,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
           repoSlug,
           NewPullRequestData(
             autoBumpCommitTitle(authorRepository),
-            f"This PR brought to you by sbt-trickle via $authorRepository%s. Changes:\n\n$changes%s"),
+            f"This PR brought to you by sbt-trickle via **$authorRepository%s**. Have a nice day!\n\n## Changes\n\n$changes%s"),
           branchName,
           "master")
         .rethrow
@@ -358,7 +363,7 @@ class AutoBump(authorRepository: String, repository: OutdatedRepository, token: 
   : IO[Either[Warnings, PullRequestDraft]] = {
     for {
       pullRequest <- (maybePullRequest fold {
-        draftPullRequest(authorRepository, branchName, changes.mkString("\n"))
+        draftPullRequest(authorRepository, branchName, changes.map("- " + _).mkString("\n"))
           .flatTap(pullRequest => IO(log.info(f"Opened ${pullRequest.html_url}%s")))
       })(IO.pure)
       labels <- getLabels(pullRequest.number)
