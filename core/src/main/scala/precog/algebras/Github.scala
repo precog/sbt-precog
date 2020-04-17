@@ -16,9 +16,11 @@
 
 package precog.algebras
 
-import github4s.algebras.{Activities, Auth, Gists, Organizations, Repositories, Teams, Users}
+import github4s.algebras._
 
 trait Github[F[_]] {
+
+  def draftPullRequests: DraftPullRequests[F]
 
   def pullRequests: PullRequests[F]
 
@@ -35,6 +37,8 @@ trait Github[F[_]] {
   def activities: Activities[F]
 
   def gitData: GitData[F]
+
+  def references: References[F]
 
   def organizations: Organizations[F]
 

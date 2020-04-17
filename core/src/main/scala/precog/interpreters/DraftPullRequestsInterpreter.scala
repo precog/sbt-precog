@@ -29,12 +29,11 @@ import precog.domain._
 import precog.domain.DraftPullRequest._
 
 
-class PullRequestsInterpreter[F[_] : Sync](
-    impl: github4s.algebras.PullRequests[F],
+class DraftPullRequestsInterpreter[F[_] : Sync](
     client: HttpClient[F],
     accessToken: Option[String])
-    extends PullRequests[F] {
-  import PullRequestsInterpreter._
+    extends DraftPullRequests[F] {
+  import DraftPullRequestsInterpreter._
 
   val draftHeader: (String, String) = "Accept" -> "application/vnd.github.shadow-cat-preview+json"
 
@@ -56,7 +55,7 @@ class PullRequestsInterpreter[F[_] : Sync](
       .post[DraftPullRequest, PullRequestDraft](accessToken, f"repos/$owner%s/$repo%s/pulls", draftHeaders, data)
   }
 
-  def listDraftPullRequests(
+  def listPullRequests(
       owner: String,
       repo: String,
       filters: List[PRFilter],
@@ -95,65 +94,13 @@ class PullRequestsInterpreter[F[_] : Sync](
       .post[GithubQuery[MarkForReview.type], GithubResponse[MarkForReview.type]](accessToken, "graphql", draftHeaders, data)
       .map(_.map(r => r.copy(result = r.result.data.markPullRequestReadyForReview.exists(_.pullRequest.exists(!_.isDraft)))))
   }
-
-  def getPullRequest(owner: String, repo: String, number: Int, headers: Map[String, String]): F[GHResponse[PullRequest]] =
-    impl.getPullRequest(owner, repo, number, headers)
-
-  def listPullRequests(
-      owner: String,
-      repo: String,
-      filters: List[PRFilter],
-      pagination: Option[Pagination],
-      headers: Map[String, String])
-      : F[GHResponse[List[PullRequest]]] =
-    impl.listPullRequests(owner, repo, filters, pagination, headers)
-
-  def listFiles(
-      owner: String,
-      repo: String,
-      number: Int,
-      pagination: Option[Pagination],
-      headers: Map[String, String])
-      : F[GHResponse[List[PullRequestFile]]] =
-    impl.listFiles(owner, repo, number, pagination, headers)
-
-  def createPullRequest(
-      owner: String,
-      repo: String,
-      newPullRequest: NewPullRequest,
-      head: String,
-      base: String,
-      maintainerCanModify: Option[Boolean],
-      headers: Map[String, String])
-      : F[GHResponse[PullRequest]] =
-    impl.createPullRequest(owner, repo, newPullRequest, head, base, maintainerCanModify, headers)
-
-  def listReviews(
-      owner: String,
-      repo: String,
-      pullRequest: Int,
-      pagination: Option[Pagination],
-      headers: Map[String, String])
-      : F[GHResponse[List[PullRequestReview]]] =
-    impl.listReviews(owner, repo, pullRequest, pagination, headers)
-
-  def getReview(
-      owner: String,
-      repo: String,
-      pullRequest: Int,
-      review: Int,
-      headers: Map[String, String])
-      : F[GHResponse[PullRequestReview]] =
-    impl.getReview(owner, repo, pullRequest, review, headers)
-
 }
 
-object PullRequestsInterpreter {
+object DraftPullRequestsInterpreter {
   import io.circe._
   import io.circe.generic.auto._
   import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
   import io.circe.syntax._
-  import github4s.Decoders._
 
   /** Representation of the json data github graphql queries expect. */
   final case class GithubQuery[A <: GraphQLQuery](query: A, variables: A#Variables)

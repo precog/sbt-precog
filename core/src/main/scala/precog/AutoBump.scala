@@ -28,11 +28,9 @@ import fs2.{Chunk, Stream}
 import github4s.GithubResponses.{GHException, GHResponse, GHResult}
 import github4s.algebras.Issues
 import github4s.domain._
-import precog.algebras.{Github => _, _}
+import precog.algebras._
 import precog.domain._
-import sbt.url
 import sbt.util.Logger
-import sbttrickle.metadata.OutdatedRepository
 
 import scala.collection.immutable.Seq
 import scala.util.Try
@@ -201,16 +199,11 @@ object AutoBump {
 
 class AutoBump(
     authorRepository: String,
-    repository: OutdatedRepository,
-    token: String,
+    owner: String,
+    repoSlug: String,
+    cloningURL: String,
     log: Logger) {
   import AutoBump._
-
-  assert(url(repository.url).getHost == "github.com")
-
-  val (owner, repoSlug) = repository.ownerAndRepository
-    .getOrElse(sys.error(f"invalid url ${repository.url}%s"))
-  val authenticated = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
 
   // TODO: check whether PR is mergeable?
   /**
@@ -218,7 +211,7 @@ class AutoBump(
    *
    * @return Oldest autobump pull request, by order of creation
    */
-  def getOldestAutoBumpPullRequest[F[_]: Sync: PullRequests: Issues]: F[Option[PullRequestDraft]] = {
+  def getOldestAutoBumpPullRequest[F[_]: Sync: DraftPullRequests: Issues]: F[Option[PullRequestDraft]] = {
     getPullRequests
       .evalFilter(pullRequest => getLabels(pullRequest.number).map(labels => isAutoBump(pullRequest, labels)))
       .head
@@ -227,9 +220,9 @@ class AutoBump(
       .map(_.headOption)
   }
 
-  def getPullRequests[F[_]: Sync: PullRequests]: Stream[F, PullRequestDraft] = {
+  def getPullRequests[F[_]: Sync: DraftPullRequests]: Stream[F, PullRequestDraft] = {
     autoPage(Pagination(1, PerPage)) { pagination =>
-      PullRequests[F].listDraftPullRequests(owner, repoSlug, PullRequestFilters, Some(pagination))
+      DraftPullRequests[F].listPullRequests(owner, repoSlug, PullRequestFilters, Some(pagination))
     }
   }
 
@@ -238,13 +231,13 @@ class AutoBump(
     Issues[F].listLabels(owner, repoSlug, pr).rethrow.map(_.result)
   }
 
-  def draftPullRequest[F[_]: Sync: PullRequests: Issues](
+  def draftPullRequest[F[_]: Sync: DraftPullRequests: Issues](
       authorRepository: String,
       branchName: String,
       changes: String)
       : F[PullRequestDraft] = {
     for {
-      response <- PullRequests[F]
+      response <- DraftPullRequests[F]
         .draftPullRequest(
           owner,
           repoSlug,
@@ -266,23 +259,23 @@ class AutoBump(
       .void
   }
 
-  def markReady[F[_]: Sync: PullRequests](pullRequest: PullRequestDraft): F[Unit] = {
-    PullRequests[F]
+  def markReady[F[_]: Sync: DraftPullRequests](pullRequest: PullRequestDraft): F[Unit] = {
+    DraftPullRequests[F]
       .markReadyForReview(owner, repoSlug, pullRequest.node_id)
       .rethrow
       .ensure(new RuntimeException(f"Failed to mark pull request ${pullRequest.number}%d ready for review"))(_.result)
       .void
   }
 
-  def close[F[_]: PullRequests](pullRequest: PullRequestDraft, title: String): F[GHResponse[PullRequestDraft]] = {
+  def close[F[_]: DraftPullRequests](pullRequest: PullRequestDraft, title: String): F[GHResponse[PullRequestDraft]] = {
     val requestUpdate = PullRequestUpdate(title = Some(title), state = Some("closed"))
-    PullRequests[F].updatePullRequest(owner, repoSlug, pullRequest.number, requestUpdate)
+    DraftPullRequests[F].updatePullRequest(owner, repoSlug, pullRequest.number, requestUpdate)
   }
 
-  def deleteBranch[F[_]: Sync: GitData](pullRequest: PullRequestDraft): F[Unit] = {
+  def deleteBranch[F[_]: Sync: References](pullRequest: PullRequestDraft): F[Unit] = {
     (pullRequest.head map { base =>
       val branch = f"refs/heads/${base.ref}%s"
-      GitData[F].deleteReference(owner, repoSlug, branch).rethrow
+      References[F].deleteReference(owner, repoSlug, branch).rethrow
     }).sequence.void
   }
 
@@ -290,16 +283,16 @@ class AutoBump(
     Issues[F].removeLabel(owner, repoSlug, pullRequest.number, label).rethrow
   }
 
-  def tryUpdateDependencies[F[_]: Sync: PullRequests: Issues: Runner]
+  def tryUpdateDependencies[F[_]: Sync: DraftPullRequests: Issues: Runner]
       : F[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
     for {
       path <- Sync[F].delay(Files.createTempDirectory("sbt-precog"))
       dir = path.toFile
-      _ <- Runner[F].hide(token).stderrToStdout !
-        f"git clone --depth 1 --no-single-branch $authenticated%s ${dir.getPath}%s"
+      _ <- Runner[F].stderrToStdout !
+        f"git clone --depth 1 --no-single-branch $cloningURL%s ${dir.getPath}%s"
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      runner = Runner[F].cd(dir).hide(token)
+      runner = Runner[F].cd(dir)
       _ <- runner.stderrToStdout ! f"git checkout $flag%s $branchName%s"
       sbt <- getSbt(dir)
       lines <- runner ! f"$sbt%s trickleUpdateDependencies"
@@ -309,7 +302,7 @@ class AutoBump(
   }
 
   def verifyUpdateDependencies[F[_]: Sync: Runner](dir: File): F[Either[Warnings, Unit]] = {
-    val runner = Runner[F].cd(dir).hide(token)
+    val runner = Runner[F].cd(dir)
     for {
       sbt <- getSbt(dir)
       _ <- runner ! f"$sbt%s trickleIsUpToDate"
@@ -321,7 +314,6 @@ class AutoBump(
   def tryCommit[F[_]: Sync: Runner](dir: File): F[Either[Warnings, Unit]] = {
     val runner = Runner[F]
       .cd(dir)
-      .hide(token)
       .stderrToStdout
       .withEnv(
         "GIT_AUTHOR_NAME" -> f"Precog Bot ($authorRepository%s)",
@@ -335,19 +327,19 @@ class AutoBump(
   }
 
   def tryPush[F[_]: Sync: Runner](dir: File, branchName: String): F[Either[Warnings, Unit]] = {
-    val runner = Runner[F].cd(dir).hide(token).stderrToStdout
+    val runner = Runner[F].cd(dir).stderrToStdout
     (runner ! f"git push origin $branchName%s")
       .void
       .attempt
       .map(_.leftMap(_ => Warnings.PushError))
   }
 
-  def ifOldest[F[_]: Sync: PullRequests](pullRequest: PullRequestDraft): F[Either[Warnings, PullRequestDraft]] = for {
+  def ifOldest[F[_]: Sync: DraftPullRequests](pullRequest: PullRequestDraft): F[Either[Warnings, PullRequestDraft]] = for {
     _ <- markReady(pullRequest)
     _ <- Sync[F].delay(log.info(f"Marked $owner%s/$repoSlug%s#${pullRequest.number}%d ready for review"))
   } yield pullRequest.asRight[Warnings]
 
-  def ifNotOldest[F[_]: Sync: PullRequests: GitData](
+  def ifNotOldest[F[_]: Sync: DraftPullRequests: References](
       maybeOldest: Option[PullRequestDraft],
       pullRequest: PullRequestDraft)
       : F[Either[Warnings, PullRequestDraft]] = {
@@ -361,7 +353,7 @@ class AutoBump(
   }
 
   // TODO: Update pull request description?
-  def createOrUpdatePullRequest[F[_]: Sync: PullRequests: Issues: GitData](
+  def createOrUpdatePullRequest[F[_]: Sync: DraftPullRequests: Issues: References](
     branchName: String,
     changes: List[String],
     changeLabel: ChangeLabel,
@@ -384,7 +376,7 @@ class AutoBump(
     } yield res
   }
 
-  def createPullRequest[F[_]: Sync: PullRequests: Issues: GitData: Runner](): F[Boolean] = {
+  def createPullRequest[F[_]: Sync: DraftPullRequests: Issues: References: Runner](): F[Boolean] = {
     val app = for {
       (dir, branchName, maybePullRequest, changes, label) <- EitherT(tryUpdateDependencies)
       _ <- EitherT(verifyUpdateDependencies(dir))

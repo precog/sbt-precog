@@ -20,7 +20,7 @@ import github4s.GithubResponses.GHResponse
 import github4s.domain.{NewPullRequest, PRFilter, Pagination}
 import precog.domain._
 
-trait PullRequests[F[_]] extends github4s.algebras.PullRequests[F] {
+trait DraftPullRequests[F[_]] {
   /** Create pull request as draft. */
   def draftPullRequest(
       owner: String,
@@ -33,7 +33,7 @@ trait PullRequests[F[_]] extends github4s.algebras.PullRequests[F] {
       : F[GHResponse[PullRequestDraft]]
 
   /** List both draft and non-draft pull requests, but return their draft flag. */
-  def listDraftPullRequests(
+  def listPullRequests(
       owner: String,
       repo: String,
       filters: List[PRFilter] = Nil,
@@ -56,6 +56,6 @@ trait PullRequests[F[_]] extends github4s.algebras.PullRequests[F] {
   def markReadyForReview(owner: String, repo: String, id: String, headers: Map[String, String] = Map()): F[GHResponse[Boolean]]
 }
 
-object PullRequests {
-  def apply[F[_]](implicit pullRequests: PullRequests[F]): PullRequests[F] = pullRequests
+object DraftPullRequests {
+  def apply[F[_]](implicit pullRequests: DraftPullRequests[F]): DraftPullRequests[F] = pullRequests
 }

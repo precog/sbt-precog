@@ -29,7 +29,7 @@ import cats.effect.{ContextShift, IO}
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import github4s.algebras.Issues
-import precog.algebras.{GitData, Github, PullRequests, Runner}
+import precog.algebras.{References, Github, DraftPullRequests, Runner}
 import precog.interpreters.{GithubInterpreter, SyncRunner}
 import sbt.Def.Initialize
 import sbt.Keys._
@@ -562,19 +562,28 @@ abstract class SbtPrecogBase extends AutoPlugin {
       },
 
       trickleCreatePullRequest := { repository =>
+        assert(url(repository.url).getHost == "github.com", s"Unexpected host on ${repository.url}")
+
         implicit val IOContextShift: ContextShift[IO] = contextShift(global)
 
         val previous = trickleCreatePullRequest.value
         val author = trickleRepositoryName.value
-        previous(repository)
         val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
+
         val github: Github[IO] = GithubInterpreter[IO](Some(token))
-        implicit val pullRequests: PullRequests[IO] = github.pullRequests
+        implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
         implicit val issues: Issues[IO] = github.issues
-        implicit val gitData: GitData[IO] = github.gitData
+        implicit val references: References[IO] = github.references
+
         val log = sLog.value
-        implicit val runner: Runner[IO] = SyncRunner[IO](log)
-        new AutoBump(author, repository, token, log)
+        implicit val runner: Runner[IO] = SyncRunner[IO](log).hide(token)
+
+        val (owner, repoSlug) = repository.ownerAndRepository
+          .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
+        val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
+
+        previous(repository)
+        new AutoBump(author, owner, repoSlug, cloningURL, log)
           .createPullRequest[IO]()
           .unsafeRunSync()
       })

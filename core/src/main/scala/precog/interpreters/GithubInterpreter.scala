@@ -19,38 +19,38 @@ package precog.interpreters
 import java.util.concurrent.TimeUnit.SECONDS
 
 import cats.effect.ConcurrentEffect
-import github4s.algebras.{GitData => _, PullRequests => _, _}
+import github4s.algebras._
 import github4s.http.HttpClient
-import github4s.interpreters.{GitDataInterpreter => _, PullRequestsInterpreter => _, _}
+import github4s.interpreters._
 import precog.algebras._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
 class GithubInterpreter[F[_]: ConcurrentEffect](
-                                                 accessToken: Option[String],
-                                                 timeout: Option[Duration])(
-                                                 implicit ec: ExecutionContext) extends Github[F] {
+    accessToken: Option[String],
+    timeout: Option[Duration])(
+    implicit ec: ExecutionContext) extends Github[F] {
 
   def defaultTimeout: FiniteDuration = Duration(1L, SECONDS)
 
   implicit val client: HttpClient[F] = new HttpClient[F](timeout.getOrElse(defaultTimeout))
   implicit val at: Option[String] = accessToken
 
-  override val pullRequests: PullRequests[F]      = new PullRequestsInterpreter[F](
-    new github4s.interpreters.PullRequestsInterpreter[F],
-    client,
-    accessToken)
+  override val draftPullRequests: DraftPullRequests[F] =
+    new DraftPullRequestsInterpreter[F](client, accessToken)
+
+  override val references: References[F] =
+    new ReferencesInterpreter[F](client, accessToken)
+
+  override val pullRequests: PullRequests[F]      = new PullRequestsInterpreter[F]
   override val users: Users[F]                    = new UsersInterpreter[F]
   override val repos: Repositories[F]             = new RepositoriesInterpreter[F]
   override val auth: Auth[F]                      = new AuthInterpreter[F]
   override val gists: Gists[F]                    = new GistsInterpreter[F]
   override val issues: Issues[F]                  = new IssuesInterpreter[F]
   override val activities: Activities[F]          = new ActivitiesInterpreter[F]
-  override val gitData: GitData[F]                = new GitDataInterpreter[F](
-    new github4s.interpreters.GitDataInterpreter[F],
-    client,
-    accessToken)
+  override val gitData: GitData[F]                = new GitDataInterpreter[F]
   override val organizations: Organizations[F]    = new OrganizationsInterpreter[F]
   override val teams: Teams[F]                    = new TeamsInterpreter[F]
 }
