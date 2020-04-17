@@ -16,25 +16,22 @@
 
 package precog.interpreters
 
-import java.util.concurrent.TimeUnit.SECONDS
+import org.http4s.client.Client
 
-import cats.effect.ConcurrentEffect
+import cats.effect.Sync
+import github4s.GithubConfig
 import github4s.algebras._
 import github4s.http.HttpClient
 import github4s.interpreters._
 import precog.algebras._
 
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration.{Duration, FiniteDuration}
+class GithubInterpreter[F[_]: Sync](
+    httpClient: Client[F],
+    accessToken: Option[String])(
+    implicit config: GithubConfig)
+    extends Github[F] {
 
-class GithubInterpreter[F[_]: ConcurrentEffect](
-    accessToken: Option[String],
-    timeout: Option[Duration])(
-    implicit ec: ExecutionContext) extends Github[F] {
-
-  def defaultTimeout: FiniteDuration = Duration(1L, SECONDS)
-
-  implicit val client: HttpClient[F] = new HttpClient[F](timeout.getOrElse(defaultTimeout))
+  implicit val client: HttpClient[F] = new HttpClient[F](httpClient, config)
   implicit val at: Option[String] = accessToken
 
   override val draftPullRequests: DraftPullRequests[F] =
@@ -57,11 +54,11 @@ class GithubInterpreter[F[_]: ConcurrentEffect](
 
 object GithubInterpreter {
 
-  def apply[F[_]: ConcurrentEffect](
-      accessToken: Option[String] = None,
-      timeout: Option[Duration] = None)(
-      implicit ec: ExecutionContext)
+  def apply[F[_]: Sync](
+      httpClient: Client[F],
+      accessToken: Option[String] = None)(
+      implicit config: GithubConfig)
       : GithubInterpreter[F] =
-    new GithubInterpreter[F](accessToken, timeout)
+    new GithubInterpreter[F](httpClient, accessToken)
 
 }

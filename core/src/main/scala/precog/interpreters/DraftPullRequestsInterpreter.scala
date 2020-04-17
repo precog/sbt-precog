@@ -19,7 +19,7 @@ package precog.interpreters
 import cats.effect.Sync
 import cats.implicits._
 import com.github.ghik.silencer.silent
-import github4s.GithubResponses.GHResponse
+import github4s.GHResponse
 import github4s.domain._
 import github4s.http.HttpClient
 import graphql.codegen.GraphQLQuery
@@ -92,7 +92,7 @@ class DraftPullRequestsInterpreter[F[_] : Sync](
     val data = new GithubQuery(MarkForReview, MarkForReview.Variables(id))
     client
       .post[GithubQuery[MarkForReview.type], GithubResponse[MarkForReview.type]](accessToken, "graphql", draftHeaders, data)
-      .map(_.map(r => r.copy(result = r.result.data.markPullRequestReadyForReview.exists(_.pullRequest.exists(!_.isDraft)))))
+      .map(r => r.copy(result = r.result.map(_.data.markPullRequestReadyForReview.exists(_.pullRequest.exists(!_.isDraft)))))
   }
 }
 

@@ -18,7 +18,7 @@ package precog.interpreters
 
 import cats.effect.Sync
 import cats.implicits._
-import github4s.GithubResponses.GHResponse
+import github4s.GHResponse
 import github4s.http.HttpClient
 import precog.algebras.References
 

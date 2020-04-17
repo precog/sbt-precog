@@ -16,7 +16,7 @@
 
 package precog.algebras
 
-import github4s.GithubResponses.GHResponse
+import github4s.GHResponse
 
 trait References[F[_]] {
   /**

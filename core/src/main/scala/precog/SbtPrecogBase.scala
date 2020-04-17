@@ -20,16 +20,18 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+import java.util.concurrent.Executors
 
+import org.http4s.client.{Client, JavaNetClientBuilder}
 import org.yaml.snakeyaml.Yaml
 
 import _root_.io.crashbox.gpg.SbtGpg
 import cats.effect.IO.contextShift
-import cats.effect.{ContextShift, IO}
+import cats.effect.{Blocker, ContextShift, IO}
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import github4s.algebras.Issues
-import precog.algebras.{References, Github, DraftPullRequests, Runner}
+import precog.algebras.{DraftPullRequests, Github, References, Runner}
 import precog.interpreters.{GithubInterpreter, SyncRunner}
 import sbt.Def.Initialize
 import sbt.Keys._
@@ -564,13 +566,18 @@ abstract class SbtPrecogBase extends AutoPlugin {
       trickleCreatePullRequest := { repository =>
         assert(url(repository.url).getHost == "github.com", s"Unexpected host on ${repository.url}")
 
-        implicit val IOContextShift: ContextShift[IO] = contextShift(global)
-
         val previous = trickleCreatePullRequest.value
         val author = trickleRepositoryName.value
         val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
 
-        val github: Github[IO] = GithubInterpreter[IO](Some(token))
+        val httpClient: Client[IO] = {
+          val blockingPool = Executors.newFixedThreadPool(5)
+          val blocker = Blocker.liftExecutorService(blockingPool)
+          implicit val IOContextShift: ContextShift[IO] = contextShift(global)
+          JavaNetClientBuilder[IO](blocker).create // use BlazeClientBuilder for production use
+        }
+
+        val github: Github[IO] = GithubInterpreter[IO](httpClient, Some(token))
         implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
         implicit val issues: Issues[IO] = github.issues
         implicit val references: References[IO] = github.references

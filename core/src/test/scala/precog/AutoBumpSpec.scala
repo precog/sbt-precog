@@ -26,7 +26,8 @@ import org.specs2.mutable.Specification
 
 import cats.effect.IO
 import cats.implicits._
-import github4s.GithubResponses.{GHException, GHResult, UnexpectedException}
+import github4s.GHError.BasicError
+import github4s.GHResponse
 import github4s.domain.{Label, Pagination, PullRequestBase}
 import precog.domain.PullRequestDraft
 
@@ -186,7 +187,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
 
     "auto paginate" in {
       val list = (1 to 10).toList
-      val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
+      val chunker: Pagination => IO[GHResponse[List[Int]]] = {
         case Pagination(page, perPage) =>
           val chunk = list.slice((page - 1) * perPage, page * perPage)
           val nextPage = page + 1
@@ -197,15 +198,15 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
                  |&per_page=$perPage>; rel="next"
                  |""".stripMargin.split('\n').mkString
           ) else Map.empty[String, String]
-          IO.pure(GHResult(chunk, 200, headers).asRight[GHException])
+          IO.pure(GHResponse(chunk.asRight, 200, headers))
       }
-      val stream = autoPage(Pagination(1, 3))(chunker)
+      val stream = autoPage[IO, Int](Pagination(1, 3))(chunker)
 
       stream.compile.toList.unsafeRunSync() mustEqual List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     }
 
     "return error on failure when auto paginating" in {
-      val chunker: Pagination => IO[Either[GHException, GHResult[List[Int]]]] = {
+      val chunker: Pagination => IO[GHResponse[List[Int]]] = {
         case Pagination(page, perPage) =>
           val chunk = (page until perPage).toList
           val nextPage = perPage + chunk.size + 4
@@ -216,8 +217,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with org.specs2.Sc
                  |&per_page=$nextPage>; rel="next"
                  |""".stripMargin.split('\n').mkString
           ) else Map.empty[String, String]
-          if (page > 1) IO.pure(UnexpectedException("test").asLeft)
-          else IO.pure(GHResult(chunk, 200, headers).asRight)
+          if (page > 1) IO.pure(GHResponse(BasicError("test").asLeft, 200, headers))
+          else IO.pure(GHResponse(chunk.asRight, 200, headers))
       }
       val stream = autoPage(Pagination(1, 5))(chunker)
 

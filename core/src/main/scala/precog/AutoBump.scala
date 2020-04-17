@@ -25,7 +25,7 @@ import cats.effect.Sync
 import cats.implicits._
 import cats.{Monad, Order}
 import fs2.{Chunk, Stream}
-import github4s.GithubResponses.{GHException, GHResponse, GHResult}
+import github4s.{GHError, GHResponse}
 import github4s.algebras.Issues
 import github4s.domain._
 import precog.algebras._
@@ -110,7 +110,7 @@ object AutoBump {
   }
 
   implicit class UnpackSyntax[F[_]: Monad, A](response: F[GHResponse[A]]) {
-    def unpack: F[Either[GHException, A]] = EitherT(response).map(_.result).value
+    def unpack: F[Either[GHError, A]] = response.map(_.result)
   }
 
   val AutoBumpLabel = ":robot:"
@@ -122,11 +122,14 @@ object AutoBump {
 
   def autoPage[F[_]: Sync, T](
       first: Pagination)(
-      call: Pagination => F[Either[GHException, GHResult[List[T]]]])
+      call: Pagination => F[GHResponse[List[T]]])
       : Stream[F, T] = {
     val chunker: Option[Pagination] => F[Option[(Chunk[T], Option[Pagination])]] = {
       case Some(pagination) =>
-        call(pagination).rethrow.map(res => Option(Chunk.seq(res.result) -> nextPage(getRelations(res.headers))))
+        call(pagination)
+          .map(res => res.result.map(Chunk.seq(_) -> nextPage(getRelations(res.headers))))
+          .rethrow
+          .map(Option(_))
       case None             =>
         Sync[F].pure(None)
     }
@@ -228,7 +231,7 @@ class AutoBump(
 
   // FIXME: current github4s api does not support Some(pagination)
   def getLabels[F[_]: Sync: Issues](pr: Int): F[List[Label]] = {
-    Issues[F].listLabels(owner, repoSlug, pr).rethrow.map(_.result)
+    Issues[F].listLabels(owner, repoSlug, pr).map(_.result).rethrow
   }
 
   def draftPullRequest[F[_]: Sync: DraftPullRequests: Issues](
@@ -237,7 +240,7 @@ class AutoBump(
       changes: String)
       : F[PullRequestDraft] = {
     for {
-      response <- DraftPullRequests[F]
+      pr <- DraftPullRequests[F]
         .draftPullRequest(
           owner,
           repoSlug,
@@ -246,8 +249,8 @@ class AutoBump(
             f"This PR brought to you by sbt-trickle via **$authorRepository%s**. Have a nice day!\n\n## Changes\n\n$changes%s"),
           branchName,
           "master")
+        .map(_.result)
         .rethrow
-      pr = response.result
       _ <- assignLabel(AutoBumpLabel, pr)
     } yield pr
   }
@@ -255,6 +258,7 @@ class AutoBump(
   def assignLabel[F[_]: Sync: Issues](label: String, pullRequest: PullRequestDraft): F[Unit] = {
     Issues[F]
       .addLabels(owner, repoSlug, pullRequest.number, List(label))
+      .map(_.result)
       .rethrow
       .void
   }
@@ -262,8 +266,9 @@ class AutoBump(
   def markReady[F[_]: Sync: DraftPullRequests](pullRequest: PullRequestDraft): F[Unit] = {
     DraftPullRequests[F]
       .markReadyForReview(owner, repoSlug, pullRequest.node_id)
+      .map(_.result)
       .rethrow
-      .ensure(new RuntimeException(f"Failed to mark pull request ${pullRequest.number}%d ready for review"))(_.result)
+      .ensure(new RuntimeException(f"Failed to mark pull request ${pullRequest.number}%d ready for review"))(x => x)
       .void
   }
 
@@ -275,12 +280,12 @@ class AutoBump(
   def deleteBranch[F[_]: Sync: References](pullRequest: PullRequestDraft): F[Unit] = {
     (pullRequest.head map { base =>
       val branch = f"refs/heads/${base.ref}%s"
-      References[F].deleteReference(owner, repoSlug, branch).rethrow
+      References[F].deleteReference(owner, repoSlug, branch).map(_.result).rethrow
     }).sequence.void
   }
 
-  def removeLabel[F[_]: Sync: Issues](pullRequest: PullRequestDraft, label: String): F[GHResult[List[Label]]] = {
-    Issues[F].removeLabel(owner, repoSlug, pullRequest.number, label).rethrow
+  def removeLabel[F[_]: Sync: Issues](pullRequest: PullRequestDraft, label: String): F[List[Label]] = {
+    Issues[F].removeLabel(owner, repoSlug, pullRequest.number, label).map(_.result).rethrow
   }
 
   def tryUpdateDependencies[F[_]: Sync: DraftPullRequests: Issues: Runner]
