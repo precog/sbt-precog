@@ -524,7 +524,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         val log = streams.value.log
         val outdatedDependencies = trickleOutdatedDependencies.value
         val dir = (ThisBuild / baseDirectory).value.toPath
-        val managedVersions = ManagedVersions(dir.resolve(VersionsPath))
+        val versions = managedVersions.value
 
         def getChange(isRevision: Boolean, isBreaking: Boolean): String =
           if (isRevision) "revision"
@@ -539,7 +539,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
           case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
         } foreach {
           case (newRevision, dependencyRepository) =>
-            managedVersions.get(dependencyRepository) match {
+            versions.get(dependencyRepository) match {
               case Some(currentRevision) =>
                 val currentVersion = VersionNumber(currentRevision)
                 val newVersion = VersionNumber(newRevision)
@@ -555,7 +555,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                 log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
             }
 
-            managedVersions(dependencyRepository) = newRevision
+            versions(dependencyRepository) = newRevision
         }
 
         log.info(s"version: ${getChange(isRevision, isBreaking)}")
