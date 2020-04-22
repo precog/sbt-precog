@@ -16,27 +16,49 @@
 
 package precog
 import java.io.File
-import java.nio.file.Files
+import java.util.concurrent.TimeUnit.MILLISECONDS
 
 import org.http4s.Uri
 
 import cats.data.EitherT
-import cats.effect.Sync
+import cats.effect.{Clock, Sync}
 import cats.implicits._
 import cats.{Monad, Order}
 import fs2.{Chunk, Stream}
-import github4s.{GHError, GHResponse}
-import github4s.algebras.Issues
 import github4s.domain._
+import github4s.{GHError, GHResponse}
+import precog.algebras.Runner.RunnerConfig
 import precog.algebras._
 import precog.domain._
 import sbt.util.Logger
 
 import scala.collection.immutable.Seq
+import scala.sys.process.ProcessLogger
 import scala.util.Try
 import scala.util.matching.Regex
 
 object AutoBump {
+
+  final case class UpdateBranch(
+      runnerConf: RunnerConfig,
+      name: String,
+      pullRequest: Option[PullRequestDraft],
+      changes: List[String],
+      label: ChangeLabel)
+
+  final case class MarkReadyFailedException(pr: Int)
+      extends RuntimeException(f"Failed to mark pull request $pr%d ready for review")
+
+  final case class GHException(ghError: GHError, statusCode: Int, location: String)
+      extends RuntimeException(s"[$location:$statusCode] ${ghError.getMessage()}", ghError)
+
+  implicit class RethrowGHErrorSyntax[F[_]: Sync, A](command: F[GHResponse[A]]) {
+    def rethrowGHError(location: String): F[A] = {
+      command
+          .map(res => res.result.leftMap(GHException(_, res.statusCode, location)))
+          .rethrow
+    }
+  }
 
   sealed trait Warnings extends Product with Serializable {
     def warn[F[_]: Sync](log: Logger): F[Unit]
@@ -109,10 +131,6 @@ object AutoBump {
       labelPattern.findFirstIn(arg).flatMap(apply)
   }
 
-  implicit class UnpackSyntax[F[_]: Monad, A](response: F[GHResponse[A]]) {
-    def unpack: F[Either[GHError, A]] = response.map(_.result)
-  }
-
   val AutoBumpLabel = ":robot:"
   val PullRequestFilters: List[PRFilter] = List(PRFilterOpen, PRFilterSortCreated, PRFilterOrderAsc, PRFilterBase("master"))
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
@@ -121,13 +139,16 @@ object AutoBump {
   def autoBumpCommitTitle(author: String): String = f"Applied dependency updates by $author%s"
 
   def autoPage[F[_]: Sync, T](
-      first: Pagination)(
+      first: Pagination,
+      location: String)(
       call: Pagination => F[GHResponse[List[T]]])
       : Stream[F, T] = {
     val chunker: Option[Pagination] => F[Option[(Chunk[T], Option[Pagination])]] = {
       case Some(pagination) =>
         call(pagination)
-          .map(res => res.result.map(Chunk.seq(_) -> nextPage(getRelations(res.headers))))
+          .map(res => res.result.bimap(
+              GHException(_, res.statusCode, location),
+              Chunk.seq(_) -> nextPage(getRelations(res.headers))))
           .rethrow
           .map(Option(_))
       case None             =>
@@ -175,10 +196,12 @@ object AutoBump {
     }
   }
 
-  def getBranch[F[_]: Sync](pullRequest: Option[PullRequestDraft]): F[(String, String)] = Sync[F].delay {
-    pullRequest
-      .map("" -> _.head.get.ref)
-      .getOrElse("-b" -> f"trickle/version-bump-${System.currentTimeMillis()}%d")
+  def getBranch[F[_]: Sync: Clock](pullRequest: Option[PullRequestDraft]): F[(String, String)] = {
+    Clock[F].realTime(MILLISECONDS) map { time =>
+      pullRequest
+          .map("" -> _.head.get.ref)
+          .getOrElse("-b" -> f"trickle/version-bump-$time%d")
+    }
   }
 
   def isAutoBump(pullRequest: PullRequestDraft, labels: List[Label]): Boolean = {
@@ -186,16 +209,16 @@ object AutoBump {
   }
 
   /** Use SBT environment variable, but, if relative path, check for existence or fallback */
-  def getSbt[F[_]: Sync](dir: File): F[String] = Sync[F].delay {
+  def getSbt[F[_]: Monad: Runner](runnerConf: RunnerConfig): F[String] = {
     val fallback = "sbt"
-    sys.env.get("SBT") match {
-      case Some(path) if new File(path).isAbsolute => path
+    runnerConf.env.get("SBT") match {
+      case Some(path) if new File(path).isAbsolute => Monad[F].point(path)
       case Some(path) if path.contains('/')        =>
-        val file = new File(dir, path)
-        if (file.exists() && file.canExecute()) path
-        else fallback
-      case Some(path)                              => path
-      case None                                    => fallback
+        for {
+          res <- Runner[F](runnerConf) ? (Seq("test", "-x", path), ProcessLogger(_ => ()))
+        } yield if (res == 0) path else fallback
+      case Some(path)                              => Monad[F].point(path)
+      case None                                    => Monad[F].point(fallback)
     }
   }
 }
@@ -214,9 +237,10 @@ class AutoBump(
    *
    * @return Oldest autobump pull request, by order of creation
    */
-  def getOldestAutoBumpPullRequest[F[_]: Sync: DraftPullRequests: Issues]: F[Option[PullRequestDraft]] = {
+  def getOldestAutoBumpPullRequest[F[_]: Sync: DraftPullRequests: Labels]: F[Option[PullRequestDraft]] = {
     getPullRequests
-      .evalFilter(pullRequest => getLabels(pullRequest.number).map(labels => isAutoBump(pullRequest, labels)))
+      .evalFilter(pullRequest =>
+        getLabels(pullRequest.number).compile.toList.map(labels => isAutoBump(pullRequest, labels)))
       .head
       .compile
       .toList
@@ -224,116 +248,110 @@ class AutoBump(
   }
 
   def getPullRequests[F[_]: Sync: DraftPullRequests]: Stream[F, PullRequestDraft] = {
-    autoPage(Pagination(1, PerPage)) { pagination =>
+    autoPage(Pagination(1, PerPage), "getPullRequests") { pagination =>
       DraftPullRequests[F].listPullRequests(owner, repoSlug, PullRequestFilters, Some(pagination))
     }
   }
 
-  // FIXME: current github4s api does not support Some(pagination)
-  def getLabels[F[_]: Sync: Issues](pr: Int): F[List[Label]] = {
-    Issues[F].listLabels(owner, repoSlug, pr).map(_.result).rethrow
+  def getLabels[F[_]: Sync: Labels](pr: Int): Stream[F, Label] = {
+    autoPage(Pagination(1, PerPage), "getLabels") { pagination =>
+      Labels[F].listLabels(owner, repoSlug, pr, Some(pagination))
+    }
   }
 
-  def draftPullRequest[F[_]: Sync: DraftPullRequests: Issues](
-      authorRepository: String,
-      branchName: String,
-      changes: String)
-      : F[PullRequestDraft] = {
+  def draftPullRequest[F[_]: Sync: DraftPullRequests: Labels](updateBranch: UpdateBranch): F[PullRequestDraft] = {
+    val changeLog = updateBranch.changes.map("- " + _).mkString("\n")
+    val description =
+      f"""This PR brought to you by sbt-trickle via **$authorRepository**. Have a nice day!
+         |
+         |## Changes
+         |
+         |$changeLog""".stripMargin
     for {
       pr <- DraftPullRequests[F]
         .draftPullRequest(
           owner,
           repoSlug,
-          NewPullRequestData(
-            autoBumpCommitTitle(authorRepository),
-            f"This PR brought to you by sbt-trickle via **$authorRepository%s**. Have a nice day!\n\n## Changes\n\n$changes%s"),
-          branchName,
+          NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
+          updateBranch.name,
           "master")
-        .map(_.result)
-        .rethrow
+        .rethrowGHError("draftPullRequest")
       _ <- assignLabel(AutoBumpLabel, pr)
     } yield pr
   }
 
-  def assignLabel[F[_]: Sync: Issues](label: String, pullRequest: PullRequestDraft): F[Unit] = {
-    Issues[F]
+  def assignLabel[F[_]: Sync: Labels](label: String, pullRequest: PullRequestDraft): F[Unit] = {
+    Labels[F]
       .addLabels(owner, repoSlug, pullRequest.number, List(label))
-      .map(_.result)
-      .rethrow
+      .rethrowGHError("assignLabel")
       .void
   }
 
   def markReady[F[_]: Sync: DraftPullRequests](pullRequest: PullRequestDraft): F[Unit] = {
     DraftPullRequests[F]
       .markReadyForReview(owner, repoSlug, pullRequest.node_id)
-      .map(_.result)
-      .rethrow
-      .ensure(new RuntimeException(f"Failed to mark pull request ${pullRequest.number}%d ready for review"))(x => x)
+      .rethrowGHError("markReady")
+      .ensure(MarkReadyFailedException(pullRequest.number))(isDraft => isDraft)
       .void
   }
 
   def close[F[_]: DraftPullRequests](pullRequest: PullRequestDraft, title: String): F[GHResponse[PullRequestDraft]] = {
-    val requestUpdate = PullRequestUpdate(title = Some(title), state = Some("closed"))
+    val requestUpdate = PullRequestUpdate(title = Some(title), state = Some("CLOSED"))
     DraftPullRequests[F].updatePullRequest(owner, repoSlug, pullRequest.number, requestUpdate)
   }
 
   def deleteBranch[F[_]: Sync: References](pullRequest: PullRequestDraft): F[Unit] = {
     (pullRequest.head map { base =>
       val branch = f"refs/heads/${base.ref}%s"
-      References[F].deleteReference(owner, repoSlug, branch).map(_.result).rethrow
+      References[F].deleteReference(owner, repoSlug, branch).rethrowGHError("deleteBranch")
     }).sequence.void
   }
 
-  def removeLabel[F[_]: Sync: Issues](pullRequest: PullRequestDraft, label: String): F[List[Label]] = {
-    Issues[F].removeLabel(owner, repoSlug, pullRequest.number, label).map(_.result).rethrow
+  def removeLabel[F[_]: Sync: Labels](pullRequest: PullRequestDraft, label: String): F[List[Label]] = {
+    Labels[F].removeLabel(owner, repoSlug, pullRequest.number, label).rethrowGHError("removeLabel")
   }
 
-  def tryUpdateDependencies[F[_]: Sync: DraftPullRequests: Issues: Runner]
-      : F[Either[Warnings, (File, String, Option[PullRequestDraft], List[String], ChangeLabel)]] = {
+  def tryUpdateDependencies[F[_]: Sync: Clock: Runner: DraftPullRequests: Labels](runnerConf: RunnerConfig)
+      : F[Either[Warnings, UpdateBranch]] = {
     for {
-      path <- Sync[F].delay(Files.createTempDirectory("sbt-precog"))
-      dir = path.toFile
-      _ <- Runner[F].stderrToStdout !
-        f"git clone --depth 1 --no-single-branch $cloningURL%s ${dir.getPath}%s"
+      atTemp <- Runner[F](runnerConf).cdTemp("sbt-precog")
+      runner = Runner[F](atTemp)
+      _ <- runner !! f"git clone --depth 1 --no-single-branch $cloningURL%s ."
       oldestPullRequest <- getOldestAutoBumpPullRequest
       (flag, branchName) <- getBranch(oldestPullRequest)
-      runner = Runner[F].cd(dir)
-      _ <- runner.stderrToStdout ! f"git checkout $flag%s $branchName%s"
-      sbt <- getSbt(dir)
+      _ <- runner !! f"git checkout $flag%s $branchName%s"
+      sbt <- getSbt[F](atTemp)
       lines <- runner ! f"$sbt%s trickleUpdateDependencies"
       changes = extractChanges(lines)
       maybeLabel = extractLabel(lines)
-    } yield maybeLabel.map(label => (dir, branchName, oldestPullRequest, changes, label))
+    } yield maybeLabel.map(label => UpdateBranch(atTemp, branchName, oldestPullRequest, changes, label))
   }
 
-  def verifyUpdateDependencies[F[_]: Sync: Runner](dir: File): F[Either[Warnings, Unit]] = {
-    val runner = Runner[F].cd(dir)
+  def verifyUpdateDependencies[F[_]: Sync: Runner](updateBranch: UpdateBranch): F[Either[Warnings, Unit]] = {
+    val runner = Runner[F](updateBranch.runnerConf)
     for {
-      sbt <- getSbt(dir)
+      sbt <- getSbt[F](updateBranch.runnerConf)
       _ <- runner ! f"$sbt%s trickleIsUpToDate"
-      updateResult <- (runner.stderrToStdout ! f"$sbt%s update").attempt
+      updateResult <- (runner !! f"$sbt%s update").attempt
     } yield updateResult.leftMap(_ => Warnings.UpdateError).void
   }
 
   // TODO: add changes to commit message?
-  def tryCommit[F[_]: Sync: Runner](dir: File): F[Either[Warnings, Unit]] = {
-    val runner = Runner[F]
-      .cd(dir)
-      .stderrToStdout
+  def tryCommit[F[_]: Sync: Runner](updateBranch: UpdateBranch): F[Either[Warnings, Unit]] = {
+    val runner = Runner[F](updateBranch.runnerConf
       .withEnv(
         "GIT_AUTHOR_NAME" -> f"Precog Bot ($authorRepository%s)",
         "GIT_AUTHOR_EMAIL" -> "bot@precog.com",
         "GIT_COMMITTER_NAME" -> f"Precog Bot ($authorRepository%s)",
-        "GIT_COMMITTER_EMAIL" -> "bot@precog.com")
+        "GIT_COMMITTER_EMAIL" -> "bot@precog.com"))
     for {
-      _ <- runner ! "git add ."
-      result <- (runner ! Seq("git", "commit", "-m", autoBumpCommitTitle(authorRepository))).void.attempt
+      _ <- runner !! "git add ."
+      result <- (runner !! Seq("git", "commit", "-m", autoBumpCommitTitle(authorRepository))).void.attempt
     } yield result.leftMap(_ => Warnings.NoChangesError)
   }
 
-  def tryPush[F[_]: Sync: Runner](dir: File, branchName: String): F[Either[Warnings, Unit]] = {
-    val runner = Runner[F].cd(dir).stderrToStdout
-    (runner ! f"git push origin $branchName%s")
+  def tryPush[F[_]: Sync: Runner](updateBranch: UpdateBranch): F[Either[Warnings, Unit]] = {
+    (Runner[F](updateBranch.runnerConf) !! f"git push origin ${updateBranch.name}%s")
       .void
       .attempt
       .map(_.leftMap(_ => Warnings.PushError))
@@ -342,7 +360,7 @@ class AutoBump(
   def ifOldest[F[_]: Sync: DraftPullRequests](pullRequest: PullRequestDraft): F[Either[Warnings, PullRequestDraft]] = for {
     _ <- markReady(pullRequest)
     _ <- Sync[F].delay(log.info(f"Marked $owner%s/$repoSlug%s#${pullRequest.number}%d ready for review"))
-  } yield pullRequest.asRight[Warnings]
+  } yield pullRequest.copy(draft = false).asRight[Warnings]
 
   def ifNotOldest[F[_]: Sync: DraftPullRequests: References](
       maybeOldest: Option[PullRequestDraft],
@@ -352,26 +370,28 @@ class AutoBump(
     for {
       _ <- close(pullRequest, f"${pullRequest.title}%s ($issue%s)")
       _ <- Sync[F].delay(log.info(f"Closed $owner%s/$repoSlug%s#${pullRequest.number}%d ($issue%s)"))
-      _ <- deleteBranch(pullRequest)
+      _ <- deleteBranch(pullRequest).void recover {
+        case e: GHException => log.warn(s"Error deleting branch: $e")
+      }
       _ <- Sync[F].delay(log.info(f"Removed branch ${pullRequest.base.map(_.ref)}%s from $owner%s/$repoSlug%s"))
     } yield Warnings.NotOldest(maybeOldest, pullRequest).asLeft[PullRequestDraft]
   }
 
+  def getOrCreatePullRequest[F[_]: Sync: DraftPullRequests: Labels](updateBranch: UpdateBranch): F[PullRequestDraft] = {
+    updateBranch.pullRequest.fold({
+      draftPullRequest(updateBranch).flatTap(pullRequest => Sync[F].delay(log.info(f"Opened ${pullRequest.html_url}%s")))
+    })(Sync[F].pure)
+  }
+
   // TODO: Update pull request description?
-  def createOrUpdatePullRequest[F[_]: Sync: DraftPullRequests: Issues: References](
-    branchName: String,
-    changes: List[String],
-    changeLabel: ChangeLabel,
-    maybePullRequest: Option[PullRequestDraft])
-  : F[Either[Warnings, PullRequestDraft]] = {
+  def createOrUpdatePullRequest[F[_]: Sync: DraftPullRequests: Labels: References](
+      updateBranch: UpdateBranch)
+      : F[Either[Warnings, PullRequestDraft]] = {
     for {
-      pullRequest <- (maybePullRequest fold {
-        draftPullRequest(authorRepository, branchName, changes.map("- " + _).mkString("\n"))
-          .flatTap(pullRequest => Sync[F].delay(log.info(f"Opened ${pullRequest.html_url}%s")))
-      })(Sync[F].pure)
-      labels <- getLabels(pullRequest.number)
+      pullRequest <- getOrCreatePullRequest(updateBranch)
+      labels <- getLabels(pullRequest.number).compile.toList
       prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
-      highestChange = (prChangeLabels + changeLabel).max
+      highestChange = (prChangeLabels + updateBranch.label).max
       lowerChanges = (prChangeLabels - highestChange).toList
       _ <- if (prChangeLabels.contains(highestChange)) Sync[F].unit else assignLabel(highestChange.label, pullRequest)
       _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
@@ -381,13 +401,13 @@ class AutoBump(
     } yield res
   }
 
-  def createPullRequest[F[_]: Sync: DraftPullRequests: Issues: References: Runner](): F[Boolean] = {
+  def createPullRequest[F[_]: Sync: Clock: Runner: DraftPullRequests: Labels: References](runnerConf: RunnerConfig): F[Boolean] = {
     val app = for {
-      (dir, branchName, maybePullRequest, changes, label) <- EitherT(tryUpdateDependencies)
-      _ <- EitherT(verifyUpdateDependencies(dir))
-      _ <- EitherT(tryCommit(dir))
-      _ <- EitherT(tryPush(dir, branchName))
-      pullRequest <- EitherT(createOrUpdatePullRequest(branchName, changes, label, maybePullRequest))
+      updateBranch <- EitherT(tryUpdateDependencies(runnerConf))
+      _ <- EitherT(verifyUpdateDependencies(updateBranch))
+      _ <- EitherT(tryCommit(updateBranch))
+      _ <- EitherT(tryPush(updateBranch))
+      pullRequest <- EitherT(createOrUpdatePullRequest(updateBranch))
     } yield pullRequest
 
     app.leftSemiflatMap(_.warn(log)).value.map(_.isRight)

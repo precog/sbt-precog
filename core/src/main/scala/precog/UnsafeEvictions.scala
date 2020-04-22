@@ -19,8 +19,8 @@ package precog
 import sbt._
 import librarymanagement.{ModuleFilter, ModuleDescriptor, ScalaModuleInfo}
 
-final class UnsafeEvictionsExceptions(val prefix: String, val evicteds: Seq[EvictionPair])
-    extends RuntimeException(s"$prefix: ${evicteds.map(e => s"${e.organization}:${e.name}").mkString(", ")}")
+final case class UnsafeEvictionsException(prefix: String, evictions: Seq[EvictionPair])
+    extends RuntimeException(s"$prefix: ${evictions.map(e => s"${e.organization}:${e.name}").mkString(", ")}")
 
 object UnsafeEvictions {
   /** Performs logging and exception-throwing given report and configurations */
@@ -38,10 +38,7 @@ object UnsafeEvictions {
     ew.lines.foreach(line => log.error(s"[${currentProject}] $line"))
     if (isFatal && ew.binaryIncompatibleEvictionExists) {
       val evictions = ew.scalaEvictions ++ ew.directEvictions ++ ew.transitiveEvictions
-      // FIXME: doesn't work!
-      // throw new UnsafeEvictionsException("Unsafe evictions detected", evictions)
-      sys.error(s"Unsafe evictions detected on ${currentProject}: " +
-        evictions.map(e => s"${e.organization}:${e.name}").mkString(", "))
+       throw UnsafeEvictionsException("Unsafe evictions detected", evictions)
     }
     report
   }
@@ -50,16 +47,13 @@ object UnsafeEvictions {
   private def guessCompatible(confs: Seq[(ModuleFilter, VersionNumberCompatibility)])
       : ((ModuleID, Option[ModuleID], Option[ScalaModuleInfo])) => Boolean = {
     case (m1, Some(m2), _) =>
-      confs
-        .find(conf => conf._1(m1))
-        .map {
-          case (_, vnc) =>
-            val r1 = VersionNumber(m1.revision)
-            val r2 = VersionNumber(m2.revision)
-            vnc.isCompatible(r1, r2)
-        }
-        .getOrElse(true)
-    case _ => true
+      confs.find(conf => conf._1(m1)) forall {
+        case (_, vnc) =>
+          val r1 = VersionNumber(m1.revision)
+          val r2 = VersionNumber(m2.revision)
+          vnc.isCompatible(r1, r2)
+      }
+    case _                 => true
   }
 
   /** Creates a ModuleFilter that does a strict organization matching */

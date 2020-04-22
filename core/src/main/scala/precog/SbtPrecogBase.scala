@@ -27,11 +27,10 @@ import org.yaml.snakeyaml.Yaml
 
 import _root_.io.crashbox.gpg.SbtGpg
 import cats.effect.IO.contextShift
-import cats.effect.{Blocker, ContextShift, IO}
+import cats.effect.{Blocker, Clock, ContextShift, IO}
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
-import github4s.algebras.Issues
-import precog.algebras.{DraftPullRequests, Github, References, Runner}
+import precog.algebras.{DraftPullRequests, Github, Labels, References, Runner}
 import precog.interpreters.{GithubInterpreter, SyncRunner}
 import sbt.Def.Initialize
 import sbt.Keys._
@@ -356,10 +355,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
       }.toString,
       trickleGitConfig := {
         import sbttrickle.git.GitConfig
-        (sys.env.get("GITHUB_ACTOR"), sys.env.get("GITHUB_TOKEN")) match {
+        val baseConf = (sys.env.get("GITHUB_ACTOR"), sys.env.get("GITHUB_TOKEN")) match {
           case (Some(user), Some(password)) => GitConfig(trickleDbURI.value, user, password)
           case _                            => GitConfig(trickleDbURI.value)
         }
+        if (githubIsWorkflowBuild.value) baseConf
+        else baseConf.withDontPush
       },
 
       transferPublishAndTagResources / aggregate := false,
@@ -516,51 +517,52 @@ abstract class SbtPrecogBase extends AutoPlugin {
       },
 
       // TODO: self-check, to run on PRs
-      // TODO: dry mode on not-a-build
       // TODO: cluster datasources/destinations
-      // TODO: set trickleGitCommitMessage
+
+      trickleGitUpdateMessage := s"${trickleRepositoryName.value} ${version.value}",
 
       trickleUpdateDependencies := {
         val log = streams.value.log
         val outdatedDependencies = trickleOutdatedDependencies.value
-        val dir = (ThisBuild / baseDirectory).value.toPath
-        val versions = managedVersions.value
+        managedVersions.?.value map { versions =>
 
-        def getChange(isRevision: Boolean, isBreaking: Boolean): String =
-          if (isRevision) "revision"
-          else if (isBreaking) "breaking"
-          else "feature"
+          def getChange(isRevision: Boolean, isBreaking: Boolean): String =
+            if (isRevision) "revision"
+            else if (isBreaking) "breaking"
+            else "feature"
 
-        var isRevision = true
-        var isBreaking = false
-        var hasErrors = false
+          var isRevision = true
+          var isBreaking = false
+          var hasErrors = false
 
-        outdatedDependencies.map {
-          case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
-        } foreach {
-          case (newRevision, dependencyRepository) =>
-            versions.get(dependencyRepository) match {
-              case Some(currentRevision) =>
-                val currentVersion = VersionNumber(currentRevision)
-                val newVersion = VersionNumber(newRevision)
-                val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
-                val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
-                isRevision &&= testRevision
-                isBreaking ||= testBreaking
-                log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
-              case None                  =>
-                // TODO: use scalafix to change build.sbt
-                hasErrors ||= true
-                log.error(s"$dependencyRepository not present on $VersionsPath")
-                log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
-            }
+          outdatedDependencies map {
+            case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
+          } foreach {
+            case (newRevision, dependencyRepository) =>
+              versions.get(dependencyRepository) match {
+                case Some(currentRevision) =>
+                  val currentVersion = VersionNumber(currentRevision)
+                  val newVersion = VersionNumber(newRevision)
+                  val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
+                  val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
+                  isRevision &&= testRevision
+                  isBreaking ||= testBreaking
+                  log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
 
-            versions(dependencyRepository) = newRevision
-        }
+                case None                  =>
+                  // TODO: use scalafix to change build.sbt
+                  hasErrors ||= true
+                  log.error(s"$dependencyRepository not present on $VersionsPath")
+                  log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
+              }
 
-        log.info(s"version: ${getChange(isRevision, isBreaking)}")
+              versions(dependencyRepository) = newRevision
+          }
 
-        if (hasErrors) sys.error("Unmanaged dependencies found!")
+          log.info(s"version: ${getChange(isRevision, isBreaking)}")
+
+          if (hasErrors) sys.error("Unmanaged dependencies found!")
+        } getOrElse sys.error(s"No version management file found; please create $VersionsPath")
       },
 
       trickleCreatePullRequest := { repository =>
@@ -579,19 +581,20 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         val github: Github[IO] = GithubInterpreter[IO](httpClient, Some(token))
         implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
-        implicit val issues: Issues[IO] = github.issues
+        implicit val labels: Labels[IO] = github.labels
         implicit val references: References[IO] = github.references
+        implicit val clock: Clock[IO] = Clock.create
 
         val log = sLog.value
-        implicit val runner: Runner[IO] = SyncRunner[IO](log).hide(token)
-
+        implicit val runner: Runner[IO] = SyncRunner[IO](log)
+        val runnerConfig = Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
         val (owner, repoSlug) = repository.ownerAndRepository
           .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
         val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
 
         previous(repository)
         new AutoBump(author, owner, repoSlug, cloningURL, log)
-          .createPullRequest[IO]()
+          .createPullRequest[IO](runnerConfig)
           .unsafeRunSync()
       })
 }

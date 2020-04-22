@@ -18,7 +18,7 @@ package precog.domain
 
 import github4s.domain.{PullRequest, PullRequestBase, User}
 
-case class PullRequestDraft(id: Int,
+final case class PullRequestDraft(id: Int,
                             number: Int,
                             node_id: String,
                             state: String,

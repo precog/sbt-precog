@@ -22,6 +22,10 @@ trait Github[F[_]] {
 
   def draftPullRequests: DraftPullRequests[F]
 
+  def labels: Labels[F]
+
+  def references: References[F]
+
   def pullRequests: PullRequests[F]
 
   def users: Users[F]
@@ -37,8 +41,6 @@ trait Github[F[_]] {
   def activities: Activities[F]
 
   def gitData: GitData[F]
-
-  def references: References[F]
 
   def organizations: Organizations[F]
 

@@ -22,7 +22,7 @@ import github4s.GHResponse
 import github4s.http.HttpClient
 import precog.algebras.References
 
-class ReferencesInterpreter [F[_] : Sync](
+class ReferencesInterpreter[F[_] : Sync](
     client: HttpClient[F],
     accessToken: Option[String])
     extends References[F] {

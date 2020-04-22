@@ -16,78 +16,87 @@
 
 package precog.interpreters
 
-import java.io.File
+import java.nio.file.Files
 
 import cats.effect.Sync
 import cats.implicits._
 import precog.algebras.Runner
+import precog.algebras.Runner.{DefaultConfig, RunnerConfig, RunnerException}
 import sbt.util.Logger
 
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.sys.process.{Process, ProcessLogger}
 
-final case class SyncRunner[F[_] : Sync](
-    log: Logger,
-    merge: Boolean = false,
-    workingDir: Option[File] = None,
-    env: Map[String, String] = Map.empty,
-    hide: Seq[String] = Seq.empty)
-    extends Runner[F] {
+final case class SyncRunner[F[_] : Sync](log: Logger, config: RunnerConfig = DefaultConfig) extends Runner[F] {
   import SyncRunner._
 
-  def stderrToStdout: SyncRunner[F] = copy(merge = true)
-  def cd(workingDir: File): SyncRunner[F] = copy(workingDir = Some(workingDir))
-  def withEnv(vars: (String, String)*): SyncRunner[F] = copy(env = env ++ vars.toMap)
-  def hide(secret: String): SyncRunner[F] = copy(hide = hide :+ secret)
+  override def withConfig(config: RunnerConfig): Runner[F] = SyncRunner(log, config)
+
+  override def cdTemp(prefix: String): F[RunnerConfig] = {
+    for {
+      tempDir <- Sync[F].delay(Files.createTempDirectory(prefix))
+    } yield config.copy(cwd = Some(tempDir.toFile))
+  }
 
   def !(command: String): F[List[String]] = {
     this ! command.split("""\s+""").toVector
   }
 
-  def !(command: Seq[String]): F[List[String]] = {
-    val F = implicitly[Sync[F]]
-    for {
-      lines <- F.pure(mutable.Buffer[String]())
-      processLogger <- F.pure(getProcessLogger(Some(lines), Some(lines)))
-      res <- (this ? (command, processLogger))
-        .ensureOr(res => new RuntimeException(f"${command.take(2).mkString(" ")}%s exit code $res%d"))(_ == 0)
-    } yield lines.toList
+  def !!(command: String): F[List[String]] = {
+    this !! command.split("""\s+""").toVector
   }
 
-  def ?(command: Seq[String], processLogger: ProcessLogger = getProcessLogger()): F[Int] = {
+  def !(command: Seq[String]): F[List[String]] = {
+    this.run(command, merge = false)
+  }
+
+  def !!(command: Seq[String]): F[List[String]] = {
+    this.run(command, merge = true)
+  }
+
+  def run(command: Seq[String], merge: Boolean): F[List[String]] = {
     val F = implicitly[Sync[F]]
     for {
-      _ <- F.delay(log.info(safeEcho(command, hide)))
-      exitCode <- F.delay(Process(command, workingDir, env.toSeq: _*) ! processLogger)
+      stdout <- F.pure(mutable.Buffer[String]())
+      stderr <- F.pure(mutable.Buffer[String]())
+      processLogger <- F.pure(getProcessLogger(Some(stdout), Some(stderr), merge))
+      _ <- (this ? (command, processLogger))
+        .ensureOr(RunnerException(_, command.toList, stderr.toList)) (_ == 0)
+    } yield stdout.toList
+  }
+
+  def ?(command: Seq[String], processLogger: ProcessLogger): F[Int] = {
+    val F = implicitly[Sync[F]]
+    for {
+      _ <- F.delay(log.info(config.sanitize(command.map(quoteIfNeeded).mkString(" "))))
+      exitCode <- F.delay(Process(command, config.cwd, config.env.toSeq: _*) ! processLogger)
     } yield exitCode
   }
 
   def getProcessLogger(
       out: Option[mutable.Buffer[String]] = None,
-      err: Option[mutable.Buffer[String]] = None)
+      err: Option[mutable.Buffer[String]] = None,
+      merge: Boolean = false)
       : ProcessLogger = {
     val stdout = { line: String =>
       log.info(line)
       out.foreach(_.append(line))
-    }
+    }.compose(config.sanitize)
     val stderr = { line: String =>
-      if (merge) log.info(line) else log.error(line)
+      if (merge) {
+        log.info(line)
+        out.foreach(_.append(line))
+      } else {
+        log.error(line)
+      }
       err.foreach(_.append(line))
-    }
+    }.compose(config.sanitize)
     ProcessLogger(stdout, stderr)
   }
 }
 
 object SyncRunner {
-  val SecretReplacement = "*****"
-
-  def safeEcho(command: Seq[String], hide: Seq[String]): String =  {
-    val commandLine = command.map(quoteIfNeeded).mkString(" ")
-    val safeCommandLine = hide.foldLeft(commandLine)(_.replaceAllLiterally(_, SecretReplacement))
-    safeCommandLine
-  }
-
   def quoteIfNeeded(s: String): String = {
     if (s.matches("[-\\w/\\\\:.]+")) s
     else if (s.contains("'")) f"$$'${s.map(c => if (c == '\'') "\\'" else c.toString).mkString}%s'"

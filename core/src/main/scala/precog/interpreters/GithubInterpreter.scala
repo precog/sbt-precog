@@ -37,6 +37,9 @@ class GithubInterpreter[F[_]: Sync](
   override val draftPullRequests: DraftPullRequests[F] =
     new DraftPullRequestsInterpreter[F](client, accessToken)
 
+  override def labels: Labels[F] =
+    new LabelsInterpreter[F](issues)
+
   override val references: References[F] =
     new ReferencesInterpreter[F](client, accessToken)
 
