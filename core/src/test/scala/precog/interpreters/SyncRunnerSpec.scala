@@ -23,7 +23,8 @@ import org.specs2.main.CommandLine
 
 import cats.effect.IO
 import precog.TestLogger
-import sbt.file
+import precog.algebras.Runner
+import precog.algebras.Runner.{RunnerConfig, RunnerException}
 import sbt.util.{Level, Logger}
 
 import scala.collection.immutable.Seq
@@ -31,103 +32,146 @@ import scala.sys.process.ProcessLogger
 
 class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specification {
   val log = Logger.Null
+  val runner: Runner[IO] = SyncRunner[IO](log)
   val tmpdir: Path = params.value("tmpdir") map { f =>
     val file = new File(f, getClass.getName.replace('.', '/'))
-    file.mkdirs()
+    sbt.io.IO.delete(file)
+    assert(file.mkdirs())
     file.toPath.pp("tmpdir: ")
-  } getOrElse Files.createTempDirectory(getClass.getSimpleName).pp("tmpdir: ")
-
-  "Fluent builders" should {
-    "be equivalent to case class build" in {
-      val runner = SyncRunner[IO](log)
-      runner mustEqual SyncRunner[IO](log, false, None, Map.empty, Seq.empty)
-      runner.stderrToStdout mustEqual SyncRunner[IO](log, merge = true)
-      runner.cd(file("./target")) mustEqual SyncRunner[IO](log, workingDir = Some(file("./target")))
-      runner.withEnv("X" -> "Y", "W" -> "Z") mustEqual SyncRunner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
-      runner.hide("password") mustEqual SyncRunner[IO](log, hide = Seq("password"))
-    }
-
-    "append instead of replace" in {
-      SyncRunner[IO](log).withEnv("X" -> "Y").withEnv("W" -> "Z") mustEqual SyncRunner[IO](log, env = Map("X" -> "Y", "W" -> "Z"))
-      SyncRunner[IO](log).hide("xyzzy").hide("foobar") mustEqual SyncRunner[IO](log, hide = Seq("xyzzy", "foobar"))
-    }
-  }
+  } getOrElse Files.createTempDirectory(getClass.getSimpleName)
+      .toFile.getCanonicalFile.toPath.pp("tmpdir: ")
+  val config: RunnerConfig = Runner.DefaultConfig
 
   "exclamation mark operator" should {
     "return captured output" in {
-      val runner = SyncRunner[IO](log)
       (runner ! Seq("bash", "-c", "echo 'abc'")).unsafeRunSync() mustEqual List("abc")
     }
 
     "break string by spaces" in {
-      val runner = SyncRunner[IO](log)
       (runner ! "printf %s%d abc 5").unsafeRunSync() mustEqual List("abc5")
     }
 
     "respect working directory" in {
-      val runner = SyncRunner[IO](log).cd(tmpdir.toFile)
-      (runner ! "pwd").unsafeRunSync().head mustEqual tmpdir.toString
+      val cdRunner = runner.withConfig(config.cd(tmpdir.toFile))
+      (cdRunner ! "pwd").unsafeRunSync().head mustEqual tmpdir.toString
     }
 
     "raise exception on errors" in {
-      val runner = SyncRunner[IO](log)
-      (runner ! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RuntimeException]("bash -c exit code 1")
+      (runner ! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException]("bash -c exit code 1")
     }
 
     "hide stuff" in {
-      val runner = SyncRunner[IO](log).hide("xyzzy")
-      (runner ! "printf abc%sdef xyzzy").unsafeRunSync() mustEqual List("abc*****def")
-    }.pendingUntilFixed("must capture logger")
-
-    "pass environment variables" in {
-      val runner = SyncRunner[IO](log).withEnv("X" -> "Y")
-      (runner ! Seq("bash", "-c", "echo $X")).unsafeRunSync() mustEqual List("Y")
+      val hideRunner = runner.withConfig(config.hide("xyzzy"))
+      (hideRunner ! "printf abc%sdef xyzzy").unsafeRunSync() mustEqual List("abc*****def")
     }
 
-    "merge log" in {
+    "hide stuff sent to stdout in the log" in {
       val log = TestLogger()
-      val runner = SyncRunner[IO](log).stderrToStdout
-      val cmd1 = Seq("bash", "-c", "echo 'normal log'")
-      val cmd2 = Seq("bash", "-c", "echo >&2 'error log'")
-      val p = for {
-        _ <- runner ! cmd1
-        _ <- runner ! cmd2
-      } yield ()
-      p.unsafeRunSync()
+      val loggingRunner = SyncRunner[IO](log).withConfig(config.hide("xyzzy"))
+      (loggingRunner ! "printf abc%sdef xyzzy").unsafeRunSync()
+      log.logs(Level.Info) mustEqual List("printf 'abc%sdef' *****", "abc*****def")
+    }
 
-      log.logs(Level.Info).toList mustEqual List(
-        SyncRunner.safeEcho(cmd1, Nil),
-        "normal log",
-        SyncRunner.safeEcho(cmd2, Nil),
-        "error log")
-      log.logs(Level.Error).toList mustEqual Nil
+    "hide stuff sent to stderr in the log" in {
+      val errorLog = TestLogger()
+      val errorRunner = SyncRunner[IO](errorLog).withConfig(config.hide("xyzzy"))
+      (errorRunner ! Seq("bash", "-c", "printf  >&2 abc%sdef xyzzy")).unsafeRunSync()
+      errorLog.logs(Level.Error) mustEqual List("abc*****def")
+    }
+
+    "pass environment variables" in {
+      val envRunner = runner.withConfig(config.withEnv("X" -> "Y"))
+      (envRunner ! Seq("bash", "-c", "echo $X")).unsafeRunSync() mustEqual List("Y")
     }
 
     "log info and error separately" in {
       val log = TestLogger()
-      val runner = SyncRunner[IO](log)
+      val loggingRunner = SyncRunner[IO](log)
       val cmd1 = Seq("bash", "-c", "echo 'normal log'")
       val cmd2 = Seq("bash", "-c", "echo >&2 'error log'")
       val p = for {
-        _ <- runner ! cmd1
-        _ <- runner ! cmd2
+        _ <- loggingRunner ! cmd1
+        _ <- loggingRunner ! cmd2
       } yield ()
       p.unsafeRunSync()
 
       log.logs(Level.Info).toList mustEqual List(
-        SyncRunner.safeEcho(cmd1, Nil),
+        cmd1.map(SyncRunner.quoteIfNeeded).mkString(" "),
         "normal log",
-        SyncRunner.safeEcho(cmd2, Nil))
+        cmd2.map(SyncRunner.quoteIfNeeded).mkString(" "))
       log.logs(Level.Error).toList mustEqual List("error log")
     }
   }
 
+  "double exclamation mark operator" should {
+    "return captured output" in {
+      (runner !! Seq("bash", "-c", "echo 'abc'")).unsafeRunSync() mustEqual List("abc")
+    }
+
+    "break string by spaces" in {
+      (runner !! "printf %s%d abc 5").unsafeRunSync() mustEqual List("abc5")
+    }
+
+    "respect working directory" in {
+      val cdRunner = runner.withConfig(config.cd(tmpdir.toFile))
+      (cdRunner !! "pwd").unsafeRunSync().head mustEqual tmpdir.toString
+    }
+
+    "raise exception on errors" in {
+      (runner !! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException]("bash -c exit code 1")
+    }
+
+    "hide stuff" in {
+      val hideRunner = runner.withConfig(config.hide("xyzzy"))
+      (hideRunner !! "printf abc%sdef xyzzy").unsafeRunSync() mustEqual List("abc*****def")
+      (hideRunner !! Seq("bash", "-c", "printf >&2 abc%sdef xyzzy")).unsafeRunSync() mustEqual List("abc*****def")
+    }
+
+    "hide stuff sent to stdout in the log" in {
+      val log = TestLogger()
+      val loggingRunner = SyncRunner[IO](log).withConfig(config.hide("xyzzy"))
+      (loggingRunner !! "printf abc%sdef xyzzy").unsafeRunSync()
+      log.logs(Level.Info) mustEqual List("printf 'abc%sdef' *****", "abc*****def")
+    }
+
+    "hide stuff sent to stderr in the log" in {
+      val errorLog = TestLogger()
+      val errorRunner = SyncRunner[IO](errorLog).withConfig(config.hide("xyzzy"))
+      (errorRunner !! Seq("bash", "-c", "printf >&2 abc%sdef xyzzy")).unsafeRunSync()
+      errorLog.logs(Level.Info) mustEqual List("bash -c 'printf >&2 abc%sdef *****'", "abc*****def")
+    }
+
+    "pass environment variables" in {
+      val envRunner = runner.withConfig(config.withEnv("X" -> "Y"))
+      (envRunner !! Seq("bash", "-c", "echo $X")).unsafeRunSync() mustEqual List("Y")
+    }
+
+    "merge log" in {
+      val log = TestLogger()
+      val loggingRunner = SyncRunner[IO](log)
+      val cmd1 = Seq("bash", "-c", "echo 'normal log'")
+      val cmd2 = Seq("bash", "-c", "echo >&2 'error log'")
+      val p = for {
+        _ <- loggingRunner !! cmd1
+        _ <- loggingRunner !! cmd2
+      } yield ()
+      p.unsafeRunSync()
+
+      log.logs(Level.Info).toList mustEqual List(
+        cmd1.map(SyncRunner.quoteIfNeeded).mkString(" "),
+        "normal log",
+        cmd2.map(SyncRunner.quoteIfNeeded).mkString(" "),
+        "error log")
+      log.logs(Level.Error).toList mustEqual Nil
+    }
+  }
+
+
   "question mark operator" should {
     "return exit code" in {
-      val runner = SyncRunner[IO](log)
-      (runner ? Seq("bash", "-c", "exit 0")).unsafeRunSync() mustEqual 0
-      (runner ? Seq("bash", "-c", "exit 1")).unsafeRunSync() mustEqual 1
-      (runner ? Seq("bash", "-c", "exit 2")).unsafeRunSync() mustEqual 2
+      (runner ? (Seq("bash", "-c", "exit 0"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 0
+      (runner ? (Seq("bash", "-c", "exit 1"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 1
+      (runner ? (Seq("bash", "-c", "exit 2"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 2
     }
 
     "capture output with processLogger" in {
@@ -136,6 +180,20 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
       val plog = ProcessLogger(line => buffer.append(line))
       (runner ? (Seq("bash", "-c", "echo 'abc'"), plog)).unsafeRunSync() mustEqual 0
       buffer.toList mustEqual List("abc")
+    }
+  }
+
+  "cdTemp" should {
+    "return a runner in a new directory" in {
+      val p = for {
+        tempConf <- runner.cdTemp("testPrefix")
+        output <- runner.withConfig(tempConf) ! "pwd"
+      } yield output
+
+      val path = new File(p.unsafeRunSync().mkString)
+      path.exists() must beTrue
+      path.isDirectory must beTrue
+      path.getName must be startingWith("testPrefix")
     }
   }
 
@@ -171,15 +229,6 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
       (runner ? (Seq("bash", "-c", "echo >&2 'xyzzy'"), plog)).unsafeRunSync() mustEqual 0
 
       buffer.toList mustEqual List("abc", "xyzzy")
-    }
-  }
-
-  "safeEcho" should {
-    "replace strings to be hidden" in {
-      val input = Seq("this", "xyzzy", "that", "print_foobar")
-      val hide = List("xyzzy", "foobar")
-      SyncRunner.SecretReplacement mustEqual "*****"
-      SyncRunner.safeEcho(input, hide) mustEqual "this ***** that print_*****"
     }
   }
 

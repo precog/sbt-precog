@@ -16,9 +16,9 @@
 
 package precog.algebras
 
-import github4s.GithubResponses.GHResponse
+import github4s.GHResponse
 
-trait GitData[F[_]] extends github4s.algebras.GitData[F] {
+trait References[F[_]] {
   /**
    * Delete a Reference
    *
@@ -33,4 +33,8 @@ trait GitData[F[_]] extends github4s.algebras.GitData[F] {
    * @return a GHResponse with the Ref
    */
   def deleteReference(owner: String, repo: String, ref: String, headers: Map[String, String] = Map()): F[GHResponse[Unit]]
+}
+
+object References {
+  def apply[F[_]](implicit references: References[F]): References[F] = references
 }

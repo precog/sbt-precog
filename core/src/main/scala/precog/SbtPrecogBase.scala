@@ -20,12 +20,18 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+import java.util.concurrent.Executors
 
+import org.http4s.client.{Client, JavaNetClientBuilder}
 import org.yaml.snakeyaml.Yaml
 
 import _root_.io.crashbox.gpg.SbtGpg
+import cats.effect.IO.contextShift
+import cats.effect.{Blocker, Clock, ContextShift, IO}
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
+import precog.algebras.{DraftPullRequests, Github, Labels, References, Runner}
+import precog.interpreters.{GithubInterpreter, SyncRunner}
 import sbt.Def.Initialize
 import sbt.Keys._
 import sbt.complete.DefaultParsers.fileParser
@@ -39,6 +45,7 @@ import sbttrickle.metadata.ModuleUpdateData
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.{Seq, Set}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process._
 
 abstract class SbtPrecogBase extends AutoPlugin {
@@ -277,9 +284,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
       })
 
     implicit final class ProjectSyntax(val self: Project) {
-      def evictToLocal(envar: String, subproject: String, test: Boolean = false): Project = {
-        val eviction = sys.env.get(envar).map(file).filter(_.exists()) map { f =>
-          foundLocalEvictions += ((envar, subproject))
+      def evictToLocal(envVar: String, subproject: String, test: Boolean = false): Project = {
+        val eviction = sys.env.get(envVar).map(file).filter(_.exists()) map { f =>
+          foundLocalEvictions += ((envVar, subproject))
 
           val ref = ProjectRef(f, subproject)
           self.dependsOn(if (test) ref % "test->test;compile->compile" else ref)
@@ -348,10 +355,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
       }.toString,
       trickleGitConfig := {
         import sbttrickle.git.GitConfig
-        (sys.env.get("GITHUB_ACTOR"), sys.env.get("GITHUB_TOKEN")) match {
-          case (Some(user), Some(password)) => GitConfig(trickleDbURI.value, user, password)
+        val baseConf = sys.env.get("GITHUB_TOKEN") match {
+          case Some(password) => GitConfig(trickleDbURI.value, "_", password)
           case _                            => GitConfig(trickleDbURI.value)
         }
+        if (githubIsWorkflowBuild.value) baseConf
+        else baseConf.withDontPush
       },
 
       transferPublishAndTagResources / aggregate := false,
@@ -391,7 +400,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       exportSecretsForActions := {
         val log = streams.value.log
-        val plogger = ProcessLogger(log.info(_), log.error(_))
 
         if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
           sys.error("$ENCRYPTION_PASSWORD not set")
@@ -401,7 +409,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         secrets.value foreach { file =>
           if (file.exists()) {
-            val decrypted = s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! plogger
+            val decrypted = s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! log
             val parsed = yaml.load[Any](decrypted)
               .asInstanceOf[java.util.Map[String, String]]
               .asScala
@@ -462,7 +470,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
   private def transfer(src: String, dst: File, permissions: Set[PosixFilePermission] = Set()) = {
     val src2 = getClass.getClassLoader.getResourceAsStream(src)
-    IO.transfer(src2, dst)
+    sbt.io.IO.transfer(src2, dst)
 
     if (!isWindows()) {
       Files.setPosixFilePermissions(
@@ -509,58 +517,85 @@ abstract class SbtPrecogBase extends AutoPlugin {
       },
 
       // TODO: self-check, to run on PRs
-      // TODO: dry mode on not-a-build
       // TODO: cluster datasources/destinations
-      // TODO: set trickleGitCommitMessage
+
+      trickleGitUpdateMessage := s"${trickleRepositoryName.value} ${version.value}",
 
       trickleUpdateDependencies := {
         val log = streams.value.log
         val outdatedDependencies = trickleOutdatedDependencies.value
-        val dir = (ThisBuild / baseDirectory).value.toPath
-        val managedVersions = ManagedVersions(dir.resolve(VersionsPath))
+        managedVersions.?.value map { versions =>
 
-        def getChange(isRevision: Boolean, isBreaking: Boolean): String =
-          if (isRevision) "revision"
-          else if (isBreaking) "breaking"
-          else "feature"
+          def getChange(isRevision: Boolean, isBreaking: Boolean): String =
+            if (isRevision) "revision"
+            else if (isBreaking) "breaking"
+            else "feature"
 
-        var isRevision = true
-        var isBreaking = false
-        var hasErrors = false
+          var isRevision = true
+          var isBreaking = false
+          var hasErrors = false
 
-        outdatedDependencies.map {
-          case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
-        } foreach {
-          case (newRevision, dependencyRepository) =>
-            managedVersions.get(dependencyRepository) match {
-              case Some(currentRevision) =>
-                val currentVersion = VersionNumber(currentRevision)
-                val newVersion = VersionNumber(newRevision)
-                val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
-                val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
-                isRevision &&= testRevision
-                isBreaking ||= testBreaking
-                log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
-              case None                  =>
-                // TODO: use scalafix to change build.sbt
-                hasErrors ||= true
-                log.error(s"$dependencyRepository not present on $VersionsPath")
-                log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
-            }
+          outdatedDependencies map {
+            case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
+          } foreach {
+            case (newRevision, dependencyRepository) =>
+              versions.get(dependencyRepository) match {
+                case Some(currentRevision) =>
+                  val currentVersion = VersionNumber(currentRevision)
+                  val newVersion = VersionNumber(newRevision)
+                  val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
+                  val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
+                  isRevision &&= testRevision
+                  isBreaking ||= testBreaking
+                  log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
 
-            managedVersions(dependencyRepository) = newRevision
-        }
+                case None                  =>
+                  // TODO: use scalafix to change build.sbt
+                  hasErrors ||= true
+                  log.error(s"$dependencyRepository not present on $VersionsPath")
+                  log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
+              }
 
-        log.info(s"version: ${getChange(isRevision, isBreaking)}")
+              versions(dependencyRepository) = newRevision
+          }
 
-        if (hasErrors) sys.error("Unmanaged dependencies found!")
+          log.info(s"version: ${getChange(isRevision, isBreaking)}")
+
+          if (hasErrors) sys.error("Unmanaged dependencies found!")
+        } getOrElse sys.error(s"No version management file found; please create $VersionsPath")
       },
 
       trickleCreatePullRequest := { repository =>
+        assert(url(repository.url).getHost == "github.com", s"Unexpected host on ${repository.url}")
+
         val previous = trickleCreatePullRequest.value
         val author = trickleRepositoryName.value
+        val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
+
+        val httpClient: Client[IO] = {
+          val blockingPool = Executors.newFixedThreadPool(5)
+          val blocker = Blocker.liftExecutorService(blockingPool)
+          implicit val IOContextShift: ContextShift[IO] = contextShift(global)
+          JavaNetClientBuilder[IO](blocker).create // use BlazeClientBuilder for production use
+        }
+
+        val github: Github[IO] = GithubInterpreter[IO](httpClient, Some(token))
+        implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
+        implicit val labels: Labels[IO] = github.labels
+        implicit val references: References[IO] = github.references
+        implicit val clock: Clock[IO] = Clock.create
+
+        val log = sLog.value
+        implicit val runner: Runner[IO] = SyncRunner[IO](log)
+        val runnerConfig = Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
+        val (owner, repoSlug) = repository.ownerAndRepository
+          .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
+        val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
+
         previous(repository)
-        new AutoBump(author, repository, sys.env("GITHUB_TOKEN"), sLog.value).createPullRequest().unsafeRunSync()
+        new AutoBump(author, owner, repoSlug, cloningURL, log)
+          .createPullRequest[IO](runnerConfig)
+          .unsafeRunSync()
       })
 }
 
