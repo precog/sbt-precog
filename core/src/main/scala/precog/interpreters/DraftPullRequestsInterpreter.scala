@@ -97,6 +97,7 @@ class DraftPullRequestsInterpreter[F[_] : Sync](
 }
 
 object DraftPullRequestsInterpreter {
+  import github4s.Decoders._
   import io.circe._
   import io.circe.generic.auto._
   import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}

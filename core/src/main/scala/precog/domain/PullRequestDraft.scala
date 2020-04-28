@@ -18,25 +18,25 @@ package precog.domain
 
 import github4s.domain.{PullRequest, PullRequestBase, User}
 
-final case class PullRequestDraft(id: Int,
-                            number: Int,
-                            node_id: String,
-                            state: String,
-                            title: String,
-                            body: Option[String],
-                            locked: Boolean,
-                            draft: Boolean,
-                            html_url: String,
-                            created_at: String,
-                            updated_at: Option[String],
-                            closed_at: Option[String],
-                            merged_at: Option[String],
-                            merge_commit_sha: Option[String],
-                            base: Option[PullRequestBase],
-                            head: Option[PullRequestBase],
-                            user: Option[User],
-                            assignee: Option[User]
-                           )
+final case class PullRequestDraft(
+    id: Int,
+    number: Int,
+    node_id: String,
+    state: String,
+    title: String,
+    body: Option[String],
+    locked: Boolean,
+    draft: Boolean,
+    html_url: String,
+    created_at: String,
+    updated_at: Option[String],
+    closed_at: Option[String],
+    merged_at: Option[String],
+    merge_commit_sha: Option[String],
+    base: Option[PullRequestBase],
+    head: Option[PullRequestBase],
+    user: Option[User],
+    assignee: Option[User])
 
 object PullRequestDraft {
   implicit class ToPullRequestSyntax(pr: PullRequestDraft) {
@@ -56,8 +56,7 @@ object PullRequestDraft {
       base = pr.base,
       head = pr.head,
       user = pr.user,
-      assignee = pr.assignee
-    )
+      assignee = pr.assignee)
   }
 }
 
