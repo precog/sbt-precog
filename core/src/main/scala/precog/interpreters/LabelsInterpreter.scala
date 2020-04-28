@@ -16,6 +16,8 @@
 
 package precog.interpreters
 
+import org.http4s.Uri
+
 import cats.effect.Sync
 import github4s.GHResponse
 import github4s.algebras.Issues
@@ -45,5 +47,6 @@ class LabelsInterpreter[F[_] : Sync](issues: Issues[F]) extends Labels[F] {
       number: Int,
       label: String,
       headers: Map[String, String])
-      : F[GHResponse[List[Label]]] = issues.removeLabel(owner, repo, number, label, headers)
+      : F[GHResponse[List[Label]]] = issues.removeLabel(owner, repo, number, Uri.encode(label), headers)
+      //TODO: Arguably, url encoding should be handled downstream (47degrees/github4s#485)
 }
