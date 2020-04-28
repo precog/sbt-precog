@@ -355,8 +355,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
       }.toString,
       trickleGitConfig := {
         import sbttrickle.git.GitConfig
-        val baseConf = (sys.env.get("GITHUB_ACTOR"), sys.env.get("GITHUB_TOKEN")) match {
-          case (Some(user), Some(password)) => GitConfig(trickleDbURI.value, user, password)
+        val baseConf = sys.env.get("GITHUB_TOKEN") match {
+          case Some(password) => GitConfig(trickleDbURI.value, "_", password)
           case _                            => GitConfig(trickleDbURI.value)
         }
         if (githubIsWorkflowBuild.value) baseConf
