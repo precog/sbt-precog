@@ -1,5 +1,0 @@
-package precog
-
-class Changes {
-
-}
