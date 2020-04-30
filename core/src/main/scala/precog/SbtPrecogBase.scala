@@ -384,11 +384,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
         transferScripts(
           "core",
           baseDir,
-          "checkAndAutoMerge",
           "commonSetup",
-          "discordTravisPost",
-          "listLabels",
-          "closePR")
+          "discordTravisPost")
 
         transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
       },
