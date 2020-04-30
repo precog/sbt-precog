@@ -267,7 +267,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
               "/tmp/sdmerge $PR_NUMBER"),
             name = Some("Self-merge"),
             env = Map("PR_NUMBER" -> "${{ github.event.pull_request.number }}"))),
-        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels, 'version: revision')"),
+        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
         needs = List("build"),
         scalas = List(scalaVersion.value)),
 
