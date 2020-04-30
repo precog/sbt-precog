@@ -232,13 +232,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
 
       githubWorkflowPublishPreamble ++= Seq(
-        WorkflowStep.Use(
-          "actions",
-          "setup-ruby",
-          "v1",
-          name = Some("Install Ruby"),
-          params = Map("ruby-version" -> "2.6")),
-
         WorkflowStep.Sbt(
           List("transferCommonResources", "transferPublishAndTagResources", "exportSecretsForActions"),
           name = Some("Common sbt setup")),
@@ -257,20 +250,24 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(
           WorkflowStep.Checkout,
           WorkflowStep.SetupScala,
-          WorkflowStep.Use(
-            "actions",
-            "setup-ruby",
-            "v1",
-            name = Some("Install Ruby"),
-            params = Map("ruby-version" -> "2.6")),
           WorkflowStep.Sbt(
             List("transferCommonResources", "exportSecretsForActions"),
             name = Some("Common sbt setup")),
-          WorkflowStep.Run(List("./scripts/commonSetup")),
-          WorkflowStep.ComputeVar("CLONE_DIR", "mktemp -d /tmp/precog-bump.XXXXXXXX"),
-          WorkflowStep.ComputeVar("PR_NUMBER", s"echo $$GITHUB_REF | cut -d'/' -f3"),
-          WorkflowStep.Run(List("./scripts/checkAndAutoMerge"))),
-        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump')"),
+
+          WorkflowStep.Run(
+            List(
+              "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
+              "chmod +x /tmp/sdmerge"),
+            name = Some("Fetch the latest sdmerge")),
+
+          WorkflowStep.Run(
+            List(
+              "git config --global user.email \"bot@precog.com\"",
+              "git config --global user.name \"Precog Bot\"",
+              "/tmp/sdmerge $PR_NUMBER"),
+            name = Some("Self-merge"),
+            env = Map("PR_NUMBER" -> "${{ github.event.pull_request.number }}"))),
+        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels, 'version: revision')"),
         needs = List("build"),
         scalas = List(scalaVersion.value)),
 
