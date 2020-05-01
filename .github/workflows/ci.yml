@@ -247,4 +247,4 @@ jobs:
         run: |
           git config --global user.email "bot@precog.com"
           git config --global user.name "Precog Bot"
-          /tmp/sdmerge $PR_NUMBER
+          /tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER

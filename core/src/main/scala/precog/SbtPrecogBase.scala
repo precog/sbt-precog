@@ -264,7 +264,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
             List(
               "git config --global user.email \"bot@precog.com\"",
               "git config --global user.name \"Precog Bot\"",
-              "/tmp/sdmerge $PR_NUMBER"),
+              "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
             name = Some("Self-merge"),
             env = Map("PR_NUMBER" -> "${{ github.event.pull_request.number }}"))),
         cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
