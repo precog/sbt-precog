@@ -324,18 +324,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
   override def buildSettings: scala.Seq[Def.Setting[_]] =
     githubActionsSettings ++
     addCommandAlias("ci", "; checkHeaders; test") ++
-    {
-      val vf = file(VersionsPath)
-      if (vf.exists())
-        Seq(managedVersions := ManagedVersions(vf.toPath))
-      else
-        Seq()
-    } ++
     Seq(
       organization := "com.precog",
 
       organizationName := "Precog",
       organizationHomepage := Some(url("https://precog.com")),
+
+      managedVersions := ManagedVersions(((LocalRootProject / baseDirectory).value / VersionsPath).toPath),
 
       resolvers := Seq(Resolver.sonatypeRepo("releases")),
 
