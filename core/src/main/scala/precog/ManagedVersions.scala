@@ -27,7 +27,7 @@ import java.nio.file.Path
 
 final class ManagedVersions private (path: Path) extends BasicJsonProtocol with JValueFormats {
 
-  private[this] val store: FileBasedStore[JValue] =
+  private[this] lazy val store: FileBasedStore[JValue] =
     new FileBasedStore(
       path.toFile,
       Converter)(
@@ -90,6 +90,8 @@ final class ManagedVersions private (path: Path) extends BasicJsonProtocol with 
         back
     }
   }
+
+  override def toString: String = s"ManagedVersions($path)"
 }
 
 object ManagedVersions {
