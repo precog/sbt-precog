@@ -35,7 +35,8 @@ object UnsafeEvictions {
 
     val ewo = evictionWarningOptions.withGuessCompatible(guessCompatible(conf))
     val ew = EvictionWarning(module, ewo, report)
-    ew.lines.foreach(line => log.error(s"[${currentProject}] $line"))
+    val logLevel = if (isFatal) Level.Error else Level.Warn
+    ew.lines.foreach(line => log.log(logLevel, s"[${currentProject}] $line"))
     if (isFatal && ew.binaryIncompatibleEvictionExists) {
       val evictions = ew.scalaEvictions ++ ew.directEvictions ++ ew.transitiveEvictions
        throw UnsafeEvictionsException("Unsafe evictions detected", evictions)
