@@ -20,14 +20,13 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
-import java.util.concurrent.Executors
 
-import org.http4s.client.{Client, JavaNetClientBuilder}
+import org.http4s.client.asynchttpclient.AsyncHttpClient
 import org.yaml.snakeyaml.Yaml
 
 import _root_.io.crashbox.gpg.SbtGpg
 import cats.effect.IO.contextShift
-import cats.effect.{Blocker, Clock, ContextShift, IO}
+import cats.effect.{Clock, ContextShift, IO}
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import precog.algebras.{DraftPullRequests, Github, Labels, References, Runner}
@@ -266,7 +265,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
               "git config --global user.name \"Precog Bot\"",
               "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
             name = Some("Self-merge"),
-            env = Map("PR_NUMBER" -> "${{ github.event.pull_request.number }}"))),
+            env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}"))),
         cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
         needs = List("build"),
         scalas = List(scalaVersion.value)),
@@ -559,32 +558,30 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         val previous = trickleCreatePullRequest.value
         val author = trickleRepositoryName.value
+        val log = sLog.value
         val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
 
-        val httpClient: Client[IO] = {
-          val blockingPool = Executors.newFixedThreadPool(5)
-          val blocker = Blocker.liftExecutorService(blockingPool)
-          implicit val IOContextShift: ContextShift[IO] = contextShift(global)
-          JavaNetClientBuilder[IO](blocker).create // use BlazeClientBuilder for production use
+        implicit val IOContextShift: ContextShift[IO] = contextShift(global)
+
+        val program = AsyncHttpClient.resource[IO]().use { client =>
+          val github: Github[IO] = GithubInterpreter[IO](client, Some(token))
+          implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
+          implicit val labels: Labels[IO] = github.labels
+          implicit val references: References[IO] = github.references
+          implicit val clock: Clock[IO] = Clock.create
+
+          implicit val runner: Runner[IO] = SyncRunner[IO](log)
+          val runnerConfig = Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
+          val (owner, repoSlug) = repository.ownerAndRepository
+              .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
+          val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
+
+          previous(repository)
+          new AutoBump(author, owner, repoSlug, cloningURL, log)
+              .createPullRequest[IO](runnerConfig)
         }
 
-        val github: Github[IO] = GithubInterpreter[IO](httpClient, Some(token))
-        implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
-        implicit val labels: Labels[IO] = github.labels
-        implicit val references: References[IO] = github.references
-        implicit val clock: Clock[IO] = Clock.create
-
-        val log = sLog.value
-        implicit val runner: Runner[IO] = SyncRunner[IO](log)
-        val runnerConfig = Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
-        val (owner, repoSlug) = repository.ownerAndRepository
-          .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
-        val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
-
-        previous(repository)
-        new AutoBump(author, owner, repoSlug, cloningURL, log)
-          .createPullRequest[IO](runnerConfig)
-          .unsafeRunSync()
+        program.unsafeRunSync()
       })
 }
 
