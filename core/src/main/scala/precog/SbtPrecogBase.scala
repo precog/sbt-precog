@@ -34,7 +34,8 @@ import precog.interpreters.{GithubInterpreter, SyncRunner}
 import sbt.Def.Initialize
 import sbt.Keys._
 import sbt.complete.DefaultParsers.fileParser
-import sbt.{Def, _}
+import sbt.util.Logger
+import sbt.{Logger => _, _}
 import sbtghactions.GenerativeKeys._
 import sbtghactions.GitHubActionsPlugin.autoImport._
 import sbtghactions.{GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}
@@ -511,45 +512,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       trickleUpdateDependencies := {
         val log = streams.value.log
+        val repository = trickleRepositoryName.value
         val outdatedDependencies = trickleOutdatedDependencies.value
         managedVersions.?.value map { versions =>
-
-          def getChange(isRevision: Boolean, isBreaking: Boolean): String =
-            if (isRevision) "revision"
-            else if (isBreaking) "breaking"
-            else "feature"
-
-          var isRevision = true
-          var isBreaking = false
-          var hasErrors = false
-
-          outdatedDependencies map {
-            case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
-          } foreach {
-            case (newRevision, dependencyRepository) =>
-              versions.get(dependencyRepository) match {
-                case Some(currentRevision) =>
-                  val currentVersion = VersionNumber(currentRevision)
-                  val newVersion = VersionNumber(newRevision)
-                  val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
-                  val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
-                  isRevision &&= testRevision
-                  isBreaking ||= testBreaking
-                  log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> $newRevision")
-
-                case None                  =>
-                  // TODO: use scalafix to change build.sbt
-                  hasErrors ||= true
-                  log.error(s"$dependencyRepository not present on $VersionsPath")
-                  log.error(s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value("$dependencyRepository")'""")
-              }
-
-              versions(dependencyRepository) = newRevision
-          }
-
-          log.info(s"version: ${getChange(isRevision, isBreaking)}")
-
-          if (hasErrors) sys.error("Unmanaged dependencies found!")
+          updateDependencies(repository, outdatedDependencies, versions, log)
         } getOrElse sys.error(s"No version management file found; please create $VersionsPath")
       },
 
@@ -583,5 +549,57 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         program.unsafeRunSync()
       })
+
+  /** Which repositories that will always bump dependencies as a revision PR */
+  val revisionRepositories = raw"""^(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron|slamx)$$""".r
+
+  def updateDependencies(
+      repository: String,
+      outdatedDependencies: Set[ModuleUpdateData],
+      versions: ManagedVersions,
+      log: Logger): Unit = {
+    def getChange(isRevision: Boolean, isBreaking: Boolean): String =
+      if (isRevision) "revision"
+      else if (isBreaking) "breaking"
+      else "feature"
+
+    var isRevision = true
+    var isBreaking = false
+    var hasErrors = false
+
+    outdatedDependencies map {
+      case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
+    } foreach {
+      case (newRevision, dependencyRepository) =>
+        versions.get(dependencyRepository) match {
+          case Some(currentRevision) =>
+            val currentVersion = VersionNumber(currentRevision)
+            val newVersion = VersionNumber(newRevision)
+            val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
+            val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
+            isRevision &&= testRevision
+            isBreaking ||= testBreaking
+            log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> " +
+                s"$newRevision")
+
+          case None =>
+            // TODO: use scalafix to change build.sbt
+            hasErrors ||= true
+            log.error(s"$dependencyRepository not present on $VersionsPath")
+            log.error(
+              s"""Fix build.sbt by replacing the version of affected artifacts with 'managedVersions.value
+                 |("$dependencyRepository")'""".stripMargin)
+        }
+
+        versions(dependencyRepository) = newRevision
+    }
+    val change = repository match {
+      case revisionRepositories() => "revision"
+      case _                      => getChange(isRevision, isBreaking)
+    }
+    log.info(s"version: $change")
+
+    if (hasErrors) sys.error("Unmanaged dependencies found!")
+  }
 }
 
