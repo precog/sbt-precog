@@ -301,8 +301,8 @@ class AutoBump(
   }
 
   def deleteBranch[F[_]: Sync: References](pullRequest: PullRequestDraft): F[Unit] = {
-    (pullRequest.head map { base =>
-      val branch = f"refs/heads/${base.ref}%s"
+    (pullRequest.head map { prHead =>
+      val branch = f"refs/heads/${prHead.ref}%s"
       References[F].deleteReference(owner, repoSlug, branch).rethrowGHError("deleteBranch")
     }).sequence.void
   }
@@ -371,9 +371,11 @@ class AutoBump(
       _ <- close(pullRequest, f"${pullRequest.title}%s ($issue%s)")
       _ <- Sync[F].delay(log.info(f"Closed $owner%s/$repoSlug%s#${pullRequest.number}%d ($issue%s)"))
       _ <- deleteBranch(pullRequest).void recover {
-        case e: GHException => log.warn(s"Error deleting branch: $e")
+        case e: GHException =>
+          if (e.statusCode == 204) Sync[F].unit
+          else log.warn(s"Error deleting branch: $e")
       }
-      _ <- Sync[F].delay(log.info(f"Removed branch ${pullRequest.base.map(_.ref)}%s from $owner%s/$repoSlug%s"))
+      _ <- Sync[F].delay(log.info(f"Removed branch ${pullRequest.head.map(_.ref)}%s from $owner%s/$repoSlug%s"))
     } yield Warnings.NotOldest(maybeOldest, pullRequest).asLeft[PullRequestDraft]
   }
 
