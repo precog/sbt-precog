@@ -17,7 +17,7 @@ set -u
 
 TRICKLE_TASKS=
 if [[ "$GITHUB_REF" == 'refs/heads/master' ]]; then
-  TRICKLE_TASKS='trickleUpdateSelf trickleCreatePullRequests'
+  TRICKLE_TASKS=';trickleUpdateSelf ;trickleCreatePullRequests'
 else
   echo "Publication is running on '$GITHUB_REF', which is not the master branch; skipping Trickle updates"
 fi
@@ -26,9 +26,9 @@ openssl aes-256-cbc -md sha1 -pass env:ENCRYPTION_PASSWORD -in signing-secret.pg
 
 # plugins are published to bintray, while artifacts are published to github
 if $SBT 'show sbtPlugin' | grep true; then
-  "$SBT" bintrayEnsureBintrayPackageExists publish bintrayRelease $TRICKLE_TASKS
+  "$SBT" bintrayEnsureBintrayPackageExists publish bintrayRelease "$TRICKLE_TASKS"
 else
-  "$SBT" +publish $TRICKLE_TASKS
+  "$SBT" +publish "$TRICKLE_TASKS"
 fi
 
 HEAD_SHA=$(git rev-parse HEAD)
