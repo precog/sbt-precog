@@ -47,6 +47,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.{Seq, Set}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process._
+import scala.util.matching.Regex
 
 abstract class SbtPrecogBase extends AutoPlugin {
   private var foundLocalEvictions: Set[(String, String)] = Set()
@@ -551,7 +552,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
       })
 
   /** Which repositories that will always bump dependencies as a revision PR */
-  val revisionRepositories = raw"""^(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron|slamx)$$""".r
+  val revisionRepositories: Regex =
+    raw"""^precog-(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron|slamx)$$""".r
 
   def updateDependencies(
       repository: String,
