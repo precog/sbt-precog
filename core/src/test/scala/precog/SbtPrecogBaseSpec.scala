@@ -52,7 +52,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val mud = ModuleUpdateData(module, dep, "2.3.7", repo, url)
       val logger = TestLogger()
 
-      base.updateDependencies("quasar", Set(mud), versions, logger) must throwA[RuntimeException]
+      base.updateDependencies("precog-quasar", Set(mud), versions, logger) must throwA[RuntimeException]
     }
 
     "log 'version: revision'" in {
@@ -61,7 +61,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("quasar", Set(mud), versions, logger)
+      base.updateDependencies("precog-quasar", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -74,7 +74,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("quasar", Set(mud), versions, logger)
+      base.updateDependencies("precog-quasar", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must not(contain("version: revision"))
       logger.logs(Level.Info) must contain("version: feature")
@@ -87,7 +87,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("quasar", Set(mud), versions, logger)
+      base.updateDependencies("precog-quasar", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must not(contain("version: revision"))
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -100,7 +100,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("quasar-datasource-s3", Set(mud), versions, logger)
+      base.updateDependencies("precog-quasar-datasource-s3", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -113,7 +113,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("quasar-destination-azure", Set(mud), versions, logger)
+      base.updateDependencies("precog-quasar-destination-azure", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -126,7 +126,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("sdbe", Set(mud), versions, logger)
+      base.updateDependencies("precog-sdbe", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -139,7 +139,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("onprem", Set(mud), versions, logger)
+      base.updateDependencies("precog-onprem", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -152,7 +152,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("electron", Set(mud), versions, logger)
+      base.updateDependencies("precog-electron", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
@@ -165,7 +165,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val logger = TestLogger()
 
       versions.update(repo, version)
-      base.updateDependencies("slamx", Set(mud), versions, logger)
+      base.updateDependencies("precog-slamx", Set(mud), versions, logger)
 
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
