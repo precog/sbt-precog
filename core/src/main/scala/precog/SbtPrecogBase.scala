@@ -212,7 +212,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
 
-      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm@20.1.0"),
+      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm8-20.1.0=zip+https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.1.0/graalvm-ce-java8-windows-amd64-20.1.0.zip"),
 
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
