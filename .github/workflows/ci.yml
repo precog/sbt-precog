@@ -29,7 +29,9 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.10]
-        java: [adopt@1.8, graalvm8-20.1.0=zip+https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.1.0/graalvm-ce-java8-windows-amd64-20.1.0.zip]
+        java:
+          - adopt@1.8
+          - 'graalvm8-20.1.0=zip+https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.1.0/graalvm-ce-java8-windows-amd64-20.1.0.zip'
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (fast)
