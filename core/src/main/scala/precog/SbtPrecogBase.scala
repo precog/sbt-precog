@@ -212,14 +212,15 @@ abstract class SbtPrecogBase extends AutoPlugin {
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
 
-      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm8-custom=zip+https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.1.0/graalvm-ce-java8-windows-amd64-20.1.0.zip"),
+      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm8@20.1.0"),
 
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
         "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
         "GITHUB_ACTOR" -> "precog-bot",
-        "GITHUB_TOKEN" -> s"$${{ secrets.GITHUB_TOKEN }}"),
+        "GITHUB_TOKEN" -> s"$${{ secrets.GITHUB_TOKEN }}",
+        "JABBA_INDEX" -> "https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json"),
 
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "backport/v*"),
