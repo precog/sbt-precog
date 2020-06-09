@@ -31,7 +31,7 @@ import github4s.GHError.{NotFoundError, UnprocessableEntityError}
 import github4s.GHResponse
 import github4s.domain._
 import precog.AutoBump.ChangeLabel.Revision
-import precog.AutoBump.Warnings.{NoChangesError, NoLabel, NotOldest, PushError, UpdateError}
+import precog.AutoBump.Warnings.{NoChangesError, NotOldest, PushError, UpdateError}
 import precog.AutoBump.{ChangeLabel, UpdateBranch}
 import precog.algebras.Runner.RunnerConfig
 import precog.algebras._
@@ -129,7 +129,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
   }
 
   "draftPullRequest" should {
-    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch", None, List("Something old, something new"), Revision)
+    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch", None, List("Something old, something new"), Some(Revision))
     val draft = autobump.draftPullRequest[Test](updateBranch)
 
     "create a pull request as draft" in {
@@ -198,12 +198,12 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
       val result = tryUpdate.runA(env).unsafeRunSync()
 
-      result must beRight(matchA[UpdateBranch]
-          .label(ChangeLabel.Breaking)
+      result must matchA[UpdateBranch]
+          .label(Some(ChangeLabel.Breaking))
           .changes(List(
             "Updated **revision** org-repo-1 `1.0.0` → `1.0.1`",
             "Updated **feature** org-repo-2 `2.0.1` → `2.1.0`",
-            "Updated **breaking** org-repo-3 `3.1.2` → `4.1.1`")))
+            "Updated **breaking** org-repo-3 `3.1.2` → `4.1.1`"))
     }
 
     "not fail if dependencies have already been updated" in {
@@ -211,9 +211,9 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       val env = TestEnv.empty
       val tryUpdate = autobump.tryUpdateDependencies[Test](Runner.DefaultConfig)
 
-      val result = tryUpdate.runA(env).unsafeRunSync()
+      val _ = tryUpdate.runA(env).unsafeRunSync()
 
-      result must beLeft(NoLabel)
+      ok    // ?
     }
 
     "fetch all branches when cloning" in {
@@ -239,7 +239,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
       val result = tryUpdate.runA(env).unsafeRunSync()
 
-      result must beRight(matchA[UpdateBranch].pullRequest(beSome(matchA[PullRequestDraft].title("Auto Bump 1"))))
+      result must matchA[UpdateBranch].pullRequest(beSome(matchA[PullRequestDraft].title("Auto Bump 1")))
     }
 
     "checkout new branch if there isn't an open PR" in {
@@ -251,7 +251,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
       state must matchA[TestEnv].cmds(contain(
         ("sbt-precog-updateDependencies", "git checkout -b trickle/version-bump-1")))
-      result must beRight(matchA[UpdateBranch].pullRequest(beNone))
+      result must matchA[UpdateBranch].pullRequest(beNone)
     }
 
     "return a runner in the checked out branch folder" in {
@@ -261,8 +261,8 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
       val result = tryUpdate.runA(env).unsafeRunSync()
 
-      result must beRight(matchA[UpdateBranch].runnerConf(
-        matchA[RunnerConfig].cwd(beSome(new File("sbt-precog-updateDependencies")))))
+      result must matchA[UpdateBranch].runnerConf(
+        matchA[RunnerConfig].cwd(beSome(new File("sbt-precog-updateDependencies"))))
     }
 
     "use local sbt if SBT is set to './sbt'" in {
@@ -287,7 +287,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
   }
 
   "verifyUpdateDependencies" should {
-    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, ChangeLabel.Revision)
+    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
 
     "be right if nothing fails" in {
       implicit val runner: Runner[Test] = TestRunner("noUpdates").responding {
@@ -327,7 +327,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
   }
 
   "tryCommit" should {
-    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, ChangeLabel.Revision)
+    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
 
     "commit changes with the bot as the author and this repo in the commit title" in {
       implicit val runner: Runner[Test] = TestRunner("commit").responding {
@@ -363,7 +363,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
   }
 
   "tryPush" should {
-    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, ChangeLabel.Revision)
+    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
 
     "push branch to origin" in {
       implicit val runner: Runner[Test] = TestRunner("push").responding {
@@ -391,7 +391,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
   "createOrUpdatePullRequest" should {
     "create pull request and mark as ready if none exists" in {
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-create", None, Nil, ChangeLabel.Revision)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-create", None, Nil, Some(ChangeLabel.Revision))
       val env = TestEnv.empty
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
@@ -422,7 +422,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/merged-branch", "master", "MERGED", true)
           .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/existing-branch", "master", "OPEN", true)
       val existingPR = env.prs((owner, repoSlug)).find(_.state == "OPEN")
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, ChangeLabel.Feature)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, Some(ChangeLabel.Feature))
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
       val (state, result) = createOrUpdate.run(env).unsafeRunSync()
@@ -451,7 +451,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/existing-branch", "master", "OPEN", true)
       val olderPR = env.prs((owner, repoSlug)).find(_.title == "Auto Bump 2")
       val existingPR = env.prs((owner, repoSlug)).find(_.title == "Auto Bump 3")
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, ChangeLabel.Revision)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, Some(ChangeLabel.Revision))
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
       val result = createOrUpdate.runA(env).unsafeRunSync()
@@ -465,7 +465,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           .withLabel(owner, repoSlug, 1, ChangeLabel.Revision.label)
           .withPR(owner, repoSlug, "Auto Bump", "", "trickle/closed-branch", "master", "CLOSED", true)
       val existingPR = env.prs((owner, repoSlug)).find(_.title == "Auto Bump")
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, ChangeLabel.Revision)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, Some(ChangeLabel.Revision))
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
       val result = createOrUpdate.runA(env).unsafeRunSync()
@@ -485,7 +485,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/older-branch", "master", "OPEN", true)
           .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/existing-branch", "master", "OPEN", true)
       val existingPR = env.prs((owner, repoSlug)).find(_.title == "Auto Bump 3")
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, ChangeLabel.Revision)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, Some(ChangeLabel.Revision))
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
       val state = createOrUpdate.runS(env).unsafeRunSync()
@@ -506,7 +506,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/older-branch", "master", "OPEN", true)
           .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/existing-branch", "master", "OPEN", true)
       val existingPR = env.prs((owner, repoSlug)).find(_.title == "Auto Bump 3")
-      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, ChangeLabel.Revision)
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, Some(ChangeLabel.Revision))
       val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
 
       val state1 = createOrUpdate.runS(env).unsafeRunSync()

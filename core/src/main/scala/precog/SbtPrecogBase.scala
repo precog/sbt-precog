@@ -555,8 +555,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
       })
 
   /** Which repositories that will always bump dependencies as a revision PR */
-  val revisionRepositories: Regex =
-    raw"""^precog-(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron|slamx)$$""".r
+  val RevisionRepositories: Regex =
+    raw"""^precog-(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron)$$""".r
+
+  val OnlyRevisionRepositories: Regex =
+    raw"""^precog-(?:slamx)$$""".r
 
   def updateDependencies(
       repository: String,
@@ -598,11 +601,14 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         versions(dependencyRepository) = newRevision
     }
+
     val change = repository match {
-      case revisionRepositories() => "revision"
-      case _                      => getChange(isRevision, isBreaking)
+      case RevisionRepositories() => Some("revision")
+      case OnlyRevisionRepositories() => Some(getChange(isRevision, isBreaking)).filter(_ == "revision")
+      case _ => Some(getChange(isRevision, isBreaking))
     }
-    log.info(s"version: $change")
+
+    change.foreach(c => log.info(s"version: $c"))
 
     if (hasErrors) sys.error("Unmanaged dependencies found!")
   }

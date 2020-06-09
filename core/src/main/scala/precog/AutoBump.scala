@@ -44,7 +44,7 @@ object AutoBump {
       name: String,
       pullRequest: Option[PullRequestDraft],
       changes: List[String],
-      label: ChangeLabel)
+      label: Option[ChangeLabel])
 
   final case class MarkReadyFailedException(pr: Int)
       extends RuntimeException(f"Failed to mark pull request $pr%d ready for review")
@@ -176,14 +176,10 @@ object AutoBump {
   }
 
   /** Extract change label from trickleUpdateDependencies log */
-  def extractLabel(lines: List[String]): Either[Warnings, ChangeLabel] = {
+  def extractLabel(lines: List[String]): Option[ChangeLabel] =
     lines collectFirst {
       case ChangeLabel(label) => label
-    } match {
-      case Some(label) => label.asRight
-      case None        => Warnings.NoLabel.asLeft
     }
-  }
 
 
   /** Extract updated versions from trickleUpdateDependencies log */
@@ -311,8 +307,9 @@ class AutoBump(
     Labels[F].removeLabel(owner, repoSlug, pullRequest.number, label).rethrowGHError("removeLabel")
   }
 
-  def tryUpdateDependencies[F[_]: Sync: Clock: Runner: DraftPullRequests: Labels](runnerConf: RunnerConfig)
-      : F[Either[Warnings, UpdateBranch]] = {
+  def tryUpdateDependencies[F[_]: Sync: Clock: Runner: DraftPullRequests: Labels](
+      runnerConf: RunnerConfig)
+      : F[UpdateBranch] = {
     for {
       atTemp <- Runner[F](runnerConf).cdTemp("sbt-precog")
       runner = Runner[F](atTemp)
@@ -323,8 +320,7 @@ class AutoBump(
       sbt <- getSbt[F](atTemp)
       lines <- runner ! f"$sbt%s trickleUpdateDependencies"
       changes = extractChanges(lines)
-      maybeLabel = extractLabel(lines)
-    } yield maybeLabel.map(label => UpdateBranch(atTemp, branchName, oldestPullRequest, changes, label))
+    } yield UpdateBranch(atTemp, branchName, oldestPullRequest, changes, extractLabel(lines))
   }
 
   def verifyUpdateDependencies[F[_]: Sync: Runner](updateBranch: UpdateBranch): F[Either[Warnings, Unit]] = {
@@ -393,7 +389,7 @@ class AutoBump(
       pullRequest <- getOrCreatePullRequest(updateBranch)
       labels <- getLabels(pullRequest.number).compile.toList
       prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
-      highestChange = (prChangeLabels + updateBranch.label).max
+      highestChange = updateBranch.label.map(prChangeLabels + _).getOrElse(prChangeLabels).max
       lowerChanges = (prChangeLabels - highestChange).toList
       _ <- if (prChangeLabels.contains(highestChange)) Sync[F].unit else assignLabel(highestChange.label, pullRequest)
       _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
@@ -405,7 +401,7 @@ class AutoBump(
 
   def createPullRequest[F[_]: Sync: Clock: Runner: DraftPullRequests: Labels: References](runnerConf: RunnerConfig): F[Boolean] = {
     val app = for {
-      updateBranch <- EitherT(tryUpdateDependencies(runnerConf))
+      updateBranch <- EitherT.right[Warnings](tryUpdateDependencies(runnerConf))
       _ <- EitherT(verifyUpdateDependencies(updateBranch))
       _ <- EitherT(tryCommit(updateBranch))
       _ <- EitherT(tryPush(updateBranch))
