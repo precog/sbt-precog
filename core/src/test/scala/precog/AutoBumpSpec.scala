@@ -211,9 +211,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       val env = TestEnv.empty
       val tryUpdate = autobump.tryUpdateDependencies[Test](Runner.DefaultConfig)
 
-      val _ = tryUpdate.runA(env).unsafeRunSync()
-
-      ok    // ?
+      tryUpdate.runA(env).unsafeRunSync().label must beNone
     }
 
     "fetch all branches when cloning" in {
