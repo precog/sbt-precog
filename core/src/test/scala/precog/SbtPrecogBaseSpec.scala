@@ -161,7 +161,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
 
     "log 'version: revision' for slamx" in {
       val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
-      val mud = ModuleUpdateData(module, dep, "3.0.0", repo, url)
+      val mud = ModuleUpdateData(module, dep, "2.3.7", repo, url)
       val logger = TestLogger()
 
       versions.update(repo, version)
@@ -170,6 +170,28 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       logger.logs(Level.Info) must contain("version: revision")
       logger.logs(Level.Info) must not(contain("version: feature"))
       logger.logs(Level.Info) must not(contain("version: breaking"))
+    }
+
+    "log nothing for slamx when feature" in {
+      val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
+      val mud = ModuleUpdateData(module, dep, "2.4.0", repo, url)
+      val logger = TestLogger()
+
+      versions.update(repo, version)
+      base.updateDependencies("precog-slamx", Set(mud), versions, logger)
+
+      logger.logs(Level.Info) must not(contain("version: "))
+    }
+
+    "log nothing for slamx when breaking" in {
+      val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
+      val mud = ModuleUpdateData(module, dep, "3.0.0", repo, url)
+      val logger = TestLogger()
+
+      versions.update(repo, version)
+      base.updateDependencies("precog-slamx", Set(mud), versions, logger)
+
+      logger.logs(Level.Info) must not(contain("version: "))
     }
   }
 

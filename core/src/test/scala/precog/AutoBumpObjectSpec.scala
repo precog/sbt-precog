@@ -107,7 +107,7 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
           |""".stripMargin.split('\n').toList
       val label = extractLabel(lines)
 
-      label must beRight(ChangeLabel.Revision)
+      label must beSome(ChangeLabel.Revision)
     }
 
     "return ChangeLabel.Feature" in {
@@ -127,7 +127,7 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
           |""".stripMargin.split('\n').toList
       val label = extractLabel(lines)
 
-      label must beRight(ChangeLabel.Feature)
+      label must beSome(ChangeLabel.Feature)
     }
 
     "return ChangeLabel.Breaking" in {
@@ -147,7 +147,7 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
           |""".stripMargin.split('\n').toList
       val label = extractLabel(lines)
 
-      label must beRight(ChangeLabel.Breaking)
+      label must beSome(ChangeLabel.Breaking)
     }
 
     "warn if no label exists" in {
@@ -172,7 +172,7 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
 
       val label = extractLabel(lines)
 
-      label must beLeft(Warnings.NoLabel)
+      label must beNone
     }
   }
 
