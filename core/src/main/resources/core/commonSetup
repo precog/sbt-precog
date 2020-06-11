@@ -5,4 +5,4 @@ IFS=$'\n\t'        # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 
 git config --global user.email "bot@precog.com"
 git config --global user.name "Precog Bot"
-git config github.actor precog-bot
+git config github.actor precog-bot-2
