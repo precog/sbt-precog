@@ -218,7 +218,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
         "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
-        "GITHUB_ACTOR" -> "precog-bot",
+        "GITHUB_ACTOR" -> "precog-bot-2",
         "GITHUB_TOKEN" -> s"$${{ secrets.GITHUB_TOKEN }}",
         "JABBA_INDEX" -> "https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json"),
 
