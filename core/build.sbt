@@ -6,5 +6,5 @@ addSbtPlugin("de.heikoseeberger" % "sbt-header"         % "5.4.0")
 addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.2.3")
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-effect" % "2.1.2",
+  "org.typelevel" %% "cats-effect" % "2.1.4",
   "com.47deg" %% "github4s" % "0.22.0")
