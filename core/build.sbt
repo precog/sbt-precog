@@ -11,7 +11,7 @@ libraryDependencies ++= Seq(
   "org.typelevel"       %% "cats-effect"              % "2.1.4",
   "co.fs2"              %% "fs2-core"                 % "2.4.2",
   "com.47deg"           %% "github4s"                 % "0.24.1+14-df9ec5e7-SNAPSHOT",
-  "org.http4s"          %% "http4s-async-http-client" % "0.21.4",
+  "org.http4s"          %% "http4s-async-http-client" % "0.21.6",
   "org.sangria-graphql" %% "sangria"                  % "1.4.2",
   "org.specs2"          %% "specs2-core"              % "4.8.3"    % Test,
   "org.specs2"          %% "specs2-matcher-extra"     % "4.8.3"    % Test,
