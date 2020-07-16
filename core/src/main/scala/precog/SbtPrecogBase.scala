@@ -233,7 +233,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
           name = Some("Common sbt setup"),
           cond = Some("env.ENCRYPTION_PASSWORD != null")),
 
-      githubWorkflowBuild := WorkflowStep.Sbt(List("ci")),
+      githubWorkflowBuild := Seq(WorkflowStep.Sbt(List("ci"))),
 
       githubWorkflowPublishPreamble ++= Seq(
         WorkflowStep.Sbt(
@@ -242,9 +242,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
         WorkflowStep.Run(List("./scripts/commonSetup"))),
 
-      githubWorkflowPublish := WorkflowStep.Run(
-        List(s"./scripts/publishAndTag $${{ github.repository }}"),
-        name = Some("Publish artifacts and create tag")),
+      githubWorkflowPublish := Seq(
+        WorkflowStep.Run(
+          List(s"./scripts/publishAndTag $${{ github.repository }}"),
+          name = Some("Publish artifacts and create tag"))),
 
       githubWorkflowPublishTargetBranches += RefPredicate.StartsWith(Ref.Branch("backport/v")),
 
