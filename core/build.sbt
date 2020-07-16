@@ -1,7 +1,7 @@
 libraryDependencies += "org.yaml" % "snakeyaml" % "1.26"
 
 addSbtPlugin("io.crashbox"       % "sbt-gpg"            % "0.2.1")
-addSbtPlugin("com.codecommit"    % "sbt-github-actions" % "0.6.4")
+addSbtPlugin("com.codecommit"    % "sbt-github-actions" % "0.8.0")
 addSbtPlugin("de.heikoseeberger" % "sbt-header"         % "5.6.0")
 addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.3-8f135be")
 
