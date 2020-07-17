@@ -5,14 +5,12 @@ addSbtPlugin("com.codecommit"    % "sbt-github-actions" % "0.8.0")
 addSbtPlugin("de.heikoseeberger" % "sbt-header"         % "5.6.0")
 addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.3-8f135be")
 
-resolvers += Resolver.sonatypeRepo("snapshots")
-
 val specs2Version = "4.10.0"
 
 libraryDependencies ++= Seq(
   "org.typelevel"       %% "cats-effect"              % "2.1.4",
   "co.fs2"              %% "fs2-core"                 % "2.4.2",
-  "com.47deg"           %% "github4s"                 % "0.24.1+14-df9ec5e7-SNAPSHOT",
+  "com.47deg"           %% "github4s"                 % "0.25.0",
   "org.http4s"          %% "http4s-async-http-client" % "0.21.6",
   "org.sangria-graphql" %% "sangria"                  % "2.0.0",
   "org.specs2"          %% "specs2-core"              % specs2Version % Test,
