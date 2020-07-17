@@ -499,7 +499,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       unsafeEvictionsFatal := githubIsWorkflowBuild.value,
       unsafeEvictionsConf += (UnsafeEvictions.IsOrg("com.precog") -> VersionNumber.SecondSegment),
       update := {
-        unsafeEvictionsCheck.value
+        val _ = unsafeEvictionsCheck.value
         update.value
       },
 

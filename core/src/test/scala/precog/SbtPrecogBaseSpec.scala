@@ -160,7 +160,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
     }
 
     "log 'version: revision' for slamx" in {
-      val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
+      val versions = ManagedVersions(tmpdir.resolve("slamx-revision.json"))
       val mud = ModuleUpdateData(module, dep, "2.3.7", repo, url)
       val logger = TestLogger()
 
@@ -173,7 +173,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
     }
 
     "log nothing for slamx when feature" in {
-      val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
+      val versions = ManagedVersions(tmpdir.resolve("slamx-feature.json"))
       val mud = ModuleUpdateData(module, dep, "2.4.0", repo, url)
       val logger = TestLogger()
 
@@ -184,7 +184,7 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
     }
 
     "log nothing for slamx when breaking" in {
-      val versions = ManagedVersions(tmpdir.resolve("slamx.json"))
+      val versions = ManagedVersions(tmpdir.resolve("slamx-breaking.json"))
       val mud = ModuleUpdateData(module, dep, "3.0.0", repo, url)
       val logger = TestLogger()
 
