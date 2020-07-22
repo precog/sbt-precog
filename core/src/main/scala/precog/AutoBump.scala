@@ -389,9 +389,14 @@ class AutoBump(
       pullRequest <- getOrCreatePullRequest(updateBranch)
       labels <- getLabels(pullRequest.number).compile.toList
       prChangeLabels = labels.flatMap(label => ChangeLabel(label.name)).toSet
-      highestChange = updateBranch.label.map(prChangeLabels + _).getOrElse(prChangeLabels).max
-      lowerChanges = (prChangeLabels - highestChange).toList
-      _ <- if (prChangeLabels.contains(highestChange)) Sync[F].unit else assignLabel(highestChange.label, pullRequest)
+      maybeHighestChange = updateBranch.label.map(prChangeLabels + _).getOrElse(prChangeLabels).toList.maximumOption
+      lowerChanges = maybeHighestChange.map(prChangeLabels - _).getOrElse(Set.empty).toList
+      _ <- maybeHighestChange match {
+        case Some(highestChange) if !prChangeLabels.contains(highestChange) =>
+          assignLabel(highestChange.label, pullRequest)
+        case _                                                              =>
+          Sync[F].unit
+      }
       _ <- lowerChanges.traverse(change => removeLabel(pullRequest, change.label))
       oldestPullRequest <- getOldestAutoBumpPullRequest
       res <- if (oldestPullRequest.exists(_.number == pullRequest.number)) ifOldest(pullRequest)

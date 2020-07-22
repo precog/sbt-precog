@@ -129,7 +129,33 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
   }
 
   "draftPullRequest" should {
-    val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch", None, List("Something old, something new"), Some(Revision))
+    val updateBranch =
+      UpdateBranch(Runner.DefaultConfig, "trickle/branch", None, List("Something old, something new"), Some(Revision))
+    val draft = autobump.draftPullRequest[Test](updateBranch)
+
+    "create a pull request as draft" in {
+      val env = TestEnv.empty
+
+      val result = draft.runS(env).unsafeRunSync()
+
+      result.prs((owner, repoSlug)) must haveSize(1)
+      result.prs((owner, repoSlug)).head must matchA[PullRequestDraft].draft(true)
+    }
+
+    "create a pull request that is found by getOldestAutoBumpPullRequest" in {
+      val env = TestEnv.empty
+      val getOldest = autobump.getOldestAutoBumpPullRequest[Test]
+
+      val (draftedPR, oldestPR) = draft.flatMap(draftedPR => getOldest.map(draftedPR -> _)).runA(env).unsafeRunSync()
+
+      oldestPR must beSome(matchA[PullRequestDraft].body(beSome(endingWith("Something old, something new"))))
+      draftedPR mustEqual oldestPR.get
+    }
+  }
+
+  "draftPullRequest with no label" should {
+    val updateBranch =
+      UpdateBranch(Runner.DefaultConfig, "trickle/branch", None, List("Something old, something new"), None)
     val draft = autobump.draftPullRequest[Test](updateBranch)
 
     "create a pull request as draft" in {
@@ -161,6 +187,15 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
           |[INFO] Updated feature org-repo-2 2.0.1 -> 2.1.0
           |[INFO] Updated breaking org-repo-3 3.1.2 -> 4.1.1
           |[INFO] version: breaking""".stripMargin.split('\n').toList
+    }
+
+    val successRunnerNoLabel = TestRunner("updateDependencies").responding {
+      case ("git" :: _, _)                                => Nil
+      case ("sbt" :: "trickleUpdateDependencies" :: _, _) =>
+        """
+          |[INFO] Updated revision org-repo-1 1.0.0 -> 1.0.1
+          |[INFO] Updated feature org-repo-2 2.0.1 -> 2.1.0
+          |[INFO] Updated breaking org-repo-3 3.1.2 -> 4.1.1""".stripMargin.split('\n').toList
     }
 
     val successRunnerWithSbt = TestRunner("localSbt").responding {
@@ -200,6 +235,21 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
       result must matchA[UpdateBranch]
           .label(Some(ChangeLabel.Breaking))
+          .changes(List(
+            "Updated **revision** org-repo-1 `1.0.0` → `1.0.1`",
+            "Updated **feature** org-repo-2 `2.0.1` → `2.1.0`",
+            "Updated **breaking** org-repo-3 `3.1.2` → `4.1.1`"))
+    }
+
+    "extract no label when no label is produced" in {
+      implicit val runner: Runner[Test] = successRunnerNoLabel
+      val env = TestEnv.empty
+      val tryUpdate = autobump.tryUpdateDependencies[Test](Runner.DefaultConfig)
+
+      val result = tryUpdate.runA(env).unsafeRunSync()
+
+      result must matchA[UpdateBranch]
+          .label(None)
           .changes(List(
             "Updated **revision** org-repo-1 `1.0.0` → `1.0.1`",
             "Updated **feature** org-repo-2 `2.0.1` → `2.1.0`",
@@ -286,6 +336,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
   "verifyUpdateDependencies" should {
     val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
+    val updateBranchNoLabel = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, None)
 
     "be right if nothing fails" in {
       implicit val runner: Runner[Test] = TestRunner("noUpdates").responding {
@@ -293,6 +344,18 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       }
       val env = TestEnv.empty
       val verifyUpdate = autobump.verifyUpdateDependencies[Test](updateBranch)
+
+      val result = verifyUpdate.runA(env).unsafeRunSync()
+
+      result must beRight
+    }
+
+    "be right with no label" in {
+      implicit val runner: Runner[Test] = TestRunner("noUpdates").responding {
+        case ("sbt" :: _, _) => Nil
+      }
+      val env = TestEnv.empty
+      val verifyUpdate = autobump.verifyUpdateDependencies[Test](updateBranchNoLabel)
 
       val result = verifyUpdate.runA(env).unsafeRunSync()
 
@@ -326,6 +389,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
   "tryCommit" should {
     val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
+    val updateBranchNoLabel = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, None)
 
     "commit changes with the bot as the author and this repo in the commit title" in {
       implicit val runner: Runner[Test] = TestRunner("commit").responding {
@@ -338,6 +402,26 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       }
       val env = TestEnv.empty
       val tryCommit = autobump.tryCommit[Test](updateBranch)
+
+      val (state, result) = tryCommit.run(env).unsafeRunSync()
+
+      result must beRight
+      state.cmds must contain(beLike[(String, String)] {
+        case (_, cmd) => cmd must beMatching("git commit -m .*thisRepo.*")
+      })
+    }
+
+    "commit changes with no label" in {
+      implicit val runner: Runner[Test] = TestRunner("commit").responding {
+        case ("git" :: _, envVars) =>
+          assert(envVars("GIT_AUTHOR_NAME") == "Precog Bot (thisRepo)")
+          assert(envVars("GIT_AUTHOR_EMAIL") == "bot@precog.com")
+          assert(envVars("GIT_COMMITTER_NAME") == "Precog Bot (thisRepo)")
+          assert(envVars("GIT_COMMITTER_EMAIL")  == "bot@precog.com")
+          Nil
+      }
+      val env = TestEnv.empty
+      val tryCommit = autobump.tryCommit[Test](updateBranchNoLabel)
 
       val (state, result) = tryCommit.run(env).unsafeRunSync()
 
@@ -362,6 +446,7 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
 
   "tryPush" should {
     val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, Some(ChangeLabel.Revision))
+    val updateBranchNoLabel = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-push", None, Nil, None)
 
     "push branch to origin" in {
       implicit val runner: Runner[Test] = TestRunner("push").responding {
@@ -369,6 +454,19 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       }
       val env = TestEnv.empty
       val tryCommit = autobump.tryPush[Test](updateBranch)
+
+      val (state, result) = tryCommit.run(env).unsafeRunSync()
+
+      result must beRight
+      state.cmds must contain(("", "git push origin trickle/branch-to-push"))
+    }
+
+    "push branch with no label" in {
+      implicit val runner: Runner[Test] = TestRunner("push").responding {
+        case ("git" :: _, _) => Nil
+      }
+      val env = TestEnv.empty
+      val tryCommit = autobump.tryPush[Test](updateBranchNoLabel)
 
       val (state, result) = tryCommit.run(env).unsafeRunSync()
 
@@ -408,6 +506,25 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
       state.prs.get((owner, repoSlug)).flatMap(_.headOption) must beSome(matchA[PullRequestDraft].draft(beFalse))
     }
 
+    "create pull request with no label" in {
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/branch-to-create", None, Nil, None)
+      val env = TestEnv.empty
+      val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
+
+      val (state, result) = createOrUpdate.run(env).unsafeRunSync()
+
+      result must beRight(matchA[PullRequestDraft]
+          .number(1)
+          .head(beSome(matchA[PullRequestBase].ref("trickle/branch-to-create")))
+          .base(beSome(matchA[PullRequestBase].ref("master")))
+          .draft(beFalse))
+
+      state.labels.get((owner, repoSlug, 1)) must beSome(contain(
+        matchA[Label].name(AutoBump.AutoBumpLabel)))
+
+      state.prs.get((owner, repoSlug)).flatMap(_.headOption) must beSome(matchA[PullRequestDraft].draft(beFalse))
+    }
+
     "update change label and mark pull request as ready if oldest" in {
       val env = TestEnv.empty
           .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
@@ -432,6 +549,30 @@ class AutoBumpSpec(params: CommandLine) extends Specification with ScalaCheck wi
         matchA[Label].name(AutoBump.AutoBumpLabel)))
 
       state.labels.get((owner, repoSlug, 3)) must beSome(not(contain(matchA[Label].name(ChangeLabel.Revision.label))))
+
+      state.prs((owner, repoSlug)).find(_.title == "Auto Bump 3") must beSome(matchA[PullRequestDraft].draft(beFalse))
+    }
+
+    "update and mark pull request with no label as ready if oldest" in {
+      val env = TestEnv.empty
+          .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
+          .withLabel(owner, repoSlug, 1, ChangeLabel.Revision.label)
+          .withLabel(owner, repoSlug, 2, AutoBump.AutoBumpLabel)
+          .withLabel(owner, repoSlug, 2, ChangeLabel.Revision.label)
+          .withLabel(owner, repoSlug, 3, AutoBump.AutoBumpLabel)
+          .withPR(owner, repoSlug, "Auto Bump 1", "", "trickle/closed-branch", "master", "CLOSED", true)
+          .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/merged-branch", "master", "MERGED", true)
+          .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/existing-branch", "master", "OPEN", true)
+      val existingPR = env.prs((owner, repoSlug)).find(_.state == "OPEN")
+      val updateBranch = UpdateBranch(Runner.DefaultConfig, "trickle/existing-branch", existingPR, Nil, None)
+      val createOrUpdate = autobump.createOrUpdatePullRequest[Test](updateBranch)
+
+      val (state, result) = createOrUpdate.run(env).unsafeRunSync()
+
+      result must beRight(matchA[PullRequestDraft].title("Auto Bump 3"))
+
+      state.labels.get((owner, repoSlug, 3)) must beSome(contain(
+        matchA[Label].name(AutoBump.AutoBumpLabel)))
 
       state.prs((owner, repoSlug)).find(_.title == "Auto Bump 3") must beSome(matchA[PullRequestDraft].draft(beFalse))
     }
