@@ -557,7 +557,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
   /** Which repositories that will always bump dependencies as a revision PR */
   val RevisionRepositories: Regex =
-    raw"""^precog-(?:quasar-(?:datasource|destination)-.+|sdbe|onprem|electron)$$""".r
+    raw"""^precog-(?:quasar-(?:datasource|destination|plugin)-.+|sdbe|onprem|electron)$$""".r
 
   val OnlyRevisionRepositories: Regex =
     raw"""^precog-(?:slamx)$$""".r
