@@ -412,15 +412,20 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
             parsed foreach {
               case (key, value) =>
-                try {
-                  Files.write(
-                    Paths.get(sys.env("GITHUB_ENV")),
-                    s"$key=$value".getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.APPEND)
-                } catch {
-                  case (ex: IOException) =>
-                    log.error(s"Failed setting env var $key: ${ex.getMessage}")
-                    throw ex
+                sys.env.get("GITHUB_ENV") match {
+                  case Some(github_env) =>
+                    try {
+                      Files.write(
+                        Paths.get(github_env),
+                        s"$key=$value\n".getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.APPEND)
+                    } catch {
+                      case (ex: IOException) =>
+                        log.error(s"Failed setting env var $key: ${ex.getMessage}")
+                        throw ex
+                    }
+                  case None =>
+                    sys.error("GITHUB_ENV env var not set")
                 }
                 println(s"Successfully set env var $key")
             }
