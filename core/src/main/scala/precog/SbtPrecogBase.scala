@@ -16,8 +16,9 @@
 
 package precog
 
-import java.io.File
-import java.nio.file.Files
+import java.io.{File, IOException}
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
 
@@ -411,8 +412,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
             parsed foreach {
               case (key, value) =>
-                println(s"::add-mask::$value")
-                println(s"""echo "$key=$value" >> $$GITHUB_ENV""")
+                try {
+                  Files.write(
+                    Paths.get(sys.env("GITHUB_ENV")),
+                    s"$key=$value".getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.APPEND)
+                } catch {
+                  case (ex: IOException) =>
+                    log.error(s"Failed setting env var $key: ${ex.getMessage}")
+                    throw ex
+                }
+                println(s"Successfully set env var $key")
             }
           }
         }
