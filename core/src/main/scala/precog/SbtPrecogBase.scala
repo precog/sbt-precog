@@ -412,7 +412,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
             parsed foreach {
               case (key, value) =>
                 println(s"::add-mask::$value")
-                println(s"::$key=$value::>>::$GITHUB_ENV")
+                println(s"::$key=$value::>>::" + "$GITHUB_ENV")
             }
           }
         }
