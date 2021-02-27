@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.12.10]
+        scala: [2.12.13]
     steps:
       - name: Checkout branch
         uses: actions/checkout@v2
