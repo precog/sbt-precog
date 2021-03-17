@@ -7,4 +7,4 @@ addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.2.3")
 
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-effect" % "2.1.2",
-  "com.47deg" %% "github4s" % "0.22.0")
+  "com.47deg" %% "github4s" % "0.28.3")
