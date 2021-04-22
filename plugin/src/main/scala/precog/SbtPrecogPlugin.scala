@@ -18,8 +18,6 @@ package precog
 
 import sbt._, Keys._
 
-import bintray.{BintrayKeys, BintrayPlugin}, BintrayKeys._
-
 import sbtghactions.GitHubActionsPlugin, GitHubActionsPlugin.autoImport._
 
 import scala.{sys, Some}
@@ -27,46 +25,25 @@ import scala.collection.immutable.Seq
 
 object SbtPrecogPlugin extends SbtPrecogBase {
 
-  override def requires = super.requires && BintrayPlugin
+  override def requires = super.requires
 
   object autoImport extends autoImport {
 
     lazy val noPublishSettings = Seq(
       publish := {},
       publishLocal := {},
-      bintrayRelease := {},
       publishArtifact := false,
-      skip in publish := true,
-      bintrayEnsureBintrayPackageExists := {})
+      skip in publish := true)
   }
 
   import autoImport._
 
   override def projectSettings =
     super.projectSettings ++
-    addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; bintrayEnsureBintrayPackageExists; publish; bintrayRelease") ++
+    addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; publish") ++
     Seq(
       sbtPlugin := true,
-
-      bintrayOrganization := Some("precog-bot"),
-      bintrayRepository := "sbt-plugins",
-      bintrayReleaseOnPublish := false,
-
-      publishMavenStyle := false,
-
-      // it's annoying that sbt-bintray doesn't do this for us
-      credentials ++= {
-        if (githubIsWorkflowBuild.value) {
-          val creds = for {
-            user <- sys.env.get("BINTRAY_USER")
-            pass <- sys.env.get("BINTRAY_PASS")
-          } yield Credentials("Bintray API Realm", "api.bintray.com", user, pass)
-
-          creds.toSeq
-        } else {
-          Seq()
-        }
-      })
+      publishMavenStyle := true)
 
   override def buildSettings =
     super.buildSettings ++

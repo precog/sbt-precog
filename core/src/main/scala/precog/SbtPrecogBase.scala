@@ -520,13 +520,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
         update.value
       },
 
-      resolvers ++= {
-        if (!publishAsOSSProject.value)
-          Seq(Resolver.bintrayRepo("precog-inc", "maven-private"))
-        else
-          Seq.empty
-      },
-
       // TODO: self-check, to run on PRs
       // TODO: cluster datasources/destinations
 
