@@ -248,7 +248,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
           List(s"./scripts/publishAndTag $${{ github.repository }}"),
           name = Some("Publish artifacts and create tag"))),
 
-      githubWorkflowPublishTargetBranches += RefPredicate.StartsWith(Ref.Branch("backport/v")),
+      githubWorkflowPublishTargetBranches ++= Seq(
+        RefPredicate.StartsWith(Ref.Branch("backport/v")),
+        RefPredicate.Equals(Ref.Branch("master"))),
 
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",

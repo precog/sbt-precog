@@ -1,6 +1,6 @@
 description := "Common build configuration for SBT projects"
 
-ThisBuild / sbtVersion := "1.3.8"
+ThisBuild / sbtVersion := "1.3.13"
 ThisBuild / scalaVersion := "2.12.12"
 
 lazy val root = project
