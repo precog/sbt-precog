@@ -18,9 +18,6 @@ package precog
 
 import sbt._, Keys._
 
-import sbtghactions.GitHubActionsPlugin, GitHubActionsPlugin.autoImport._
-
-import scala.{sys, Some}
 import scala.collection.immutable.Seq
 
 object SbtPrecogPlugin extends SbtPrecogBase {
