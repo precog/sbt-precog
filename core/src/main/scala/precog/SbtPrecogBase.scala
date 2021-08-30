@@ -132,7 +132,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Xfuture")
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
-      headerLicense := Some(HeaderLicense.ALv2("2020", "Precog Data")),
+      headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       checkHeaders := {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
@@ -143,7 +143,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       autoCompilerPlugins := true,
       autoAPIMappings := true,
 
-      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.0" cross CrossVersion.full),
+      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.2" cross CrossVersion.full),
       addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
 
       // default to true
@@ -205,15 +205,15 @@ abstract class SbtPrecogBase extends AutoPlugin {
       developers := List(
         Developer(
           id = "precog",
-          name = "Precog Inc.",
-          email = "contact@precog.com",
+          name = "Precog Data",
+          email = "support@precog.com",
           url = new URL("http://precog.com")
         )))
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
 
-      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm8@20.1.0"),
+      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1", "graalvm-ce-java8@21.1"),
 
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
