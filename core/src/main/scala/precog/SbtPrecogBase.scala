@@ -143,7 +143,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       autoCompilerPlugins := true,
       autoAPIMappings := true,
 
-      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.2" cross CrossVersion.full),
+      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.1" cross CrossVersion.full),
       addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
 
       // default to true
