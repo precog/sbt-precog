@@ -220,8 +220,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "REPO_SLUG" -> s"$${{ github.repository }}",
         "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
         "GITHUB_ACTOR" -> "precog-bot",
-        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}",
-        "JABBA_INDEX" -> "https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json"),
+        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"),
 
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "main", "backport/v*"),
