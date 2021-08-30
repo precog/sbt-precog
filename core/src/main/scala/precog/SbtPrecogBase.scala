@@ -224,7 +224,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "JABBA_INDEX" -> "https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json"),
 
       // we don't want to redundantly build other pushed branches
-      githubWorkflowTargetBranches := Seq("master", "backport/v*"),
+      githubWorkflowTargetBranches := Seq("master", "main", "backport/v*"),
 
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
 
@@ -250,6 +250,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       githubWorkflowPublishTargetBranches ++= Seq(
         RefPredicate.StartsWith(Ref.Branch("backport/v")),
+        RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
 
       githubWorkflowAddedJobs += WorkflowJob(
