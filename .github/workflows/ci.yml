@@ -9,14 +9,13 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: [master, backport/v*]
+    branches: [master, main, backport/v*]
     types: [opened, reopened, synchronize, ready_for_review]
   push:
-    branches: [master, backport/v*]
+    branches: [master, main, backport/v*]
 
 env:
   SBT: ./sbt
-  JABBA_INDEX: 'https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json'
   REPO_SLUG: ${{ github.repository }}
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
   GITHUB_ACTOR: precog-bot
@@ -30,7 +29,10 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.12]
-        java: [adopt@1.8, graalvm8@20.1.0]
+        java:
+          - adopt@1.11
+          - graalvm-ce-java11@21.1.0
+          - graalvm-ce-java8@21.1.0
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
@@ -76,12 +78,12 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/backport/v') || github.ref == 'refs/heads/master')
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/backport/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     strategy:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.12]
-        java: [adopt@1.8]
+        java: [adopt@1.11]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)

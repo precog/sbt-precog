@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Precog Data
+ * Copyright 2021 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -132,7 +132,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Xfuture")
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
-      headerLicense := Some(HeaderLicense.ALv2("2020", "Precog Data")),
+      headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       checkHeaders := {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
@@ -143,7 +143,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       autoCompilerPlugins := true,
       autoAPIMappings := true,
 
-      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.0" cross CrossVersion.full),
+      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.1" cross CrossVersion.full),
       addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
 
       // default to true
@@ -205,26 +205,25 @@ abstract class SbtPrecogBase extends AutoPlugin {
       developers := List(
         Developer(
           id = "precog",
-          name = "Precog Inc.",
-          email = "contact@precog.com",
+          name = "Precog Data",
+          email = "support@precog.com",
           url = new URL("http://precog.com")
         )))
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
 
-      githubWorkflowJavaVersions := Seq("adopt@1.8", "graalvm8@20.1.0"),
+      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0", "graalvm-ce-java8@21.1.0"),
 
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
         "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
         "GITHUB_ACTOR" -> "precog-bot",
-        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}",
-        "JABBA_INDEX" -> "https://github.com/1Jo1/jabba/raw/support-graalvm-java-8-and-11/index.json"),
+        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"),
 
       // we don't want to redundantly build other pushed branches
-      githubWorkflowTargetBranches := Seq("master", "backport/v*"),
+      githubWorkflowTargetBranches := Seq("master", "main", "backport/v*"),
 
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
 
@@ -250,6 +249,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       githubWorkflowPublishTargetBranches ++= Seq(
         RefPredicate.StartsWith(Ref.Branch("backport/v")),
+        RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
 
       githubWorkflowAddedJobs += WorkflowJob(
