@@ -148,15 +148,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     val scalafmtSettings: Seq[Def.Setting[_]] = Seq(
       SettingKey[Unit]("scalafmtGenerateConfig") := {
+        // writes to file once when build is loaded
         SIO.write(
-          // writes to file once when build is loaded
           file(".scalafmt-common.conf"),
-          SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt-common.conf")))
+          resourceContents("/core/scalafmt-common.conf")
         )
         if (!file(".scalafmt.conf").exists())
-          SIO.write(
-            file(".scalafmt.conf"),
-            SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt.conf"))))
+          SIO.write(file(".scalafmt.conf"), resourceContents("/core/scalafmt.conf"))
       })
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
@@ -232,9 +230,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
-      githubWorkflowJavaVersions := Seq(
-        "adopt@1.11",
-        "graalvm-ce-java11@21.1.0"),
+      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0"),
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
@@ -452,6 +448,16 @@ abstract class SbtPrecogBase extends AutoPlugin {
         encryptSecret / aggregate := false,
         encryptSecret := crypt("-e", _ + ".enc").evaluated
       )
+
+  private def resourceContents(resourceName: String): String =
+    Option(getClass.getResource(resourceName)) match {
+      case None =>
+        sys.error(s"Resource $resourceName not found")
+      case Some(res) =>
+        sbt.io.Using.urlInputStream(res) { stream =>
+          SIO.readStream(stream, StandardCharsets.UTF_8)
+        }
+    }
 
   def crypt(operation: String, destFile: String => String): Initialize[InputTask[Unit]] =
     Def.inputTask {
