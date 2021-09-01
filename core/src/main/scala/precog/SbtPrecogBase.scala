@@ -340,7 +340,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
   override def buildSettings: scala.Seq[Def.Setting[_]] =
     githubActionsSettings ++
-    addCommandAlias("ci", "; checkHeaders; test") ++
+    addCommandAlias("ci", "; checkHeaders; scalafmtCheckAll; test") ++
     Seq(
       organization := "com.precog",
 
