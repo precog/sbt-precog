@@ -17,18 +17,19 @@
 package precog.interpreters
 
 import java.io.File
-import java.nio.file.{Files, Path}
-
-import org.specs2.main.CommandLine
-
-import cats.effect.IO
-import precog.TestLogger
-import precog.algebras.Runner
-import precog.algebras.Runner.{RunnerConfig, RunnerException}
-import sbt.util.{Level, Logger}
-
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.collection.immutable.Seq
 import scala.sys.process.ProcessLogger
+
+import cats.effect.IO
+import org.specs2.main.CommandLine
+import precog.TestLogger
+import precog.algebras.Runner
+import precog.algebras.Runner.RunnerConfig
+import precog.algebras.Runner.RunnerException
+import sbt.util.Level
+import sbt.util.Logger
 
 class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specification {
   val log = Logger.Null
@@ -38,8 +39,12 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
     sbt.io.IO.delete(file)
     assert(file.mkdirs())
     file.toPath.pp("tmpdir: ")
-  } getOrElse Files.createTempDirectory(getClass.getSimpleName)
-      .toFile.getCanonicalFile.toPath.pp("tmpdir: ")
+  } getOrElse Files
+    .createTempDirectory(getClass.getSimpleName)
+    .toFile
+    .getCanonicalFile
+    .toPath
+    .pp("tmpdir: ")
   val config: RunnerConfig = Runner.DefaultConfig
 
   "exclamation mark operator" should {
@@ -57,7 +62,8 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
     }
 
     "raise exception on errors" in {
-      (runner ! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException]("bash -c exit code 1")
+      (runner ! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException](
+        "bash -c exit code 1")
     }
 
     "hide stuff" in {
@@ -118,13 +124,15 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
     }
 
     "raise exception on errors" in {
-      (runner !! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException]("bash -c exit code 1")
+      (runner !! Seq("bash", "-c", "exit 1")).unsafeRunSync() must throwA[RunnerException](
+        "bash -c exit code 1")
     }
 
     "hide stuff" in {
       val hideRunner = runner.withConfig(config.hide("xyzzy"))
       (hideRunner !! "printf abc%sdef xyzzy").unsafeRunSync() mustEqual List("abc*****def")
-      (hideRunner !! Seq("bash", "-c", "printf >&2 abc%sdef xyzzy")).unsafeRunSync() mustEqual List("abc*****def")
+      (hideRunner !! Seq("bash", "-c", "printf >&2 abc%sdef xyzzy"))
+        .unsafeRunSync() mustEqual List("abc*****def")
     }
 
     "hide stuff sent to stdout in the log" in {
@@ -138,7 +146,8 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
       val errorLog = TestLogger()
       val errorRunner = SyncRunner[IO](errorLog).withConfig(config.hide("xyzzy"))
       (errorRunner !! Seq("bash", "-c", "printf >&2 abc%sdef xyzzy")).unsafeRunSync()
-      errorLog.logs(Level.Info) mustEqual List("bash -c 'printf >&2 abc%sdef *****'", "abc*****def")
+      errorLog
+        .logs(Level.Info) mustEqual List("bash -c 'printf >&2 abc%sdef *****'", "abc*****def")
     }
 
     "pass environment variables" in {
@@ -166,12 +175,14 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
     }
   }
 
-
   "question mark operator" should {
     "return exit code" in {
-      (runner ? (Seq("bash", "-c", "exit 0"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 0
-      (runner ? (Seq("bash", "-c", "exit 1"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 1
-      (runner ? (Seq("bash", "-c", "exit 2"), ProcessLogger(_ => ()))).unsafeRunSync() mustEqual 2
+      (runner ? (Seq("bash", "-c", "exit 0"), ProcessLogger(_ => ())))
+        .unsafeRunSync() mustEqual 0
+      (runner ? (Seq("bash", "-c", "exit 1"), ProcessLogger(_ => ())))
+        .unsafeRunSync() mustEqual 1
+      (runner ? (Seq("bash", "-c", "exit 2"), ProcessLogger(_ => ())))
+        .unsafeRunSync() mustEqual 2
     }
 
     "capture output with processLogger" in {
@@ -193,7 +204,7 @@ class SyncRunnerSpec(params: CommandLine) extends org.specs2.mutable.Specificati
       val path = new File(p.unsafeRunSync().mkString)
       path.exists() must beTrue
       path.isDirectory must beTrue
-      path.getName must be startingWith("testPrefix")
+      path.getName must be startingWith "testPrefix"
     }
   }
 

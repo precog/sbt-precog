@@ -16,37 +16,37 @@
 
 package precog.interpreters
 
-import org.http4s.Uri
-
 import cats.effect.Sync
 import github4s.GHResponse
 import github4s.algebras.Issues
-import github4s.domain.{Label, Pagination}
+import github4s.domain.Label
+import github4s.domain.Pagination
+import org.http4s.Uri
 import precog.algebras.Labels
 
-class LabelsInterpreter[F[_] : Sync](issues: Issues[F]) extends Labels[F] {
+class LabelsInterpreter[F[_]: Sync](issues: Issues[F]) extends Labels[F] {
   def listLabels(
       owner: String,
       repo: String,
       number: Int,
       pagination: Option[Pagination],
-      headers: Map[String, String])
-      : F[GHResponse[List[Label]]] = issues.listLabels(owner, repo, number, pagination, headers)
+      headers: Map[String, String]): F[GHResponse[List[Label]]] =
+    issues.listLabels(owner, repo, number, pagination, headers)
 
   def addLabels(
       owner: String,
       repo: String,
       number: Int,
       labels: List[String],
-      headers: Map[String, String])
-      : F[GHResponse[List[Label]]] = issues.addLabels(owner, repo, number, labels, headers)
+      headers: Map[String, String]): F[GHResponse[List[Label]]] =
+    issues.addLabels(owner, repo, number, labels, headers)
 
   def removeLabel(
       owner: String,
       repo: String,
       number: Int,
       label: String,
-      headers: Map[String, String])
-      : F[GHResponse[List[Label]]] = issues.removeLabel(owner, repo, number, Uri.encode(label), headers)
-      //TODO: Arguably, url encoding should be handled downstream (47degrees/github4s#485)
+      headers: Map[String, String]): F[GHResponse[List[Label]]] =
+    issues.removeLabel(owner, repo, number, Uri.encode(label), headers)
+  //TODO: Arguably, url encoding should be handled downstream (47degrees/github4s#485)
 }

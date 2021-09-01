@@ -16,7 +16,9 @@
 
 package precog.domain
 
-import github4s.domain.{PullRequest, PullRequestBase, User}
+import github4s.domain.PullRequest
+import github4s.domain.PullRequestBase
+import github4s.domain.User
 
 final case class PullRequestDraft(
     id: Int,
@@ -56,7 +58,8 @@ object PullRequestDraft {
       base = pr.base,
       head = pr.head,
       user = pr.user,
-      assignee = pr.assignee)
+      assignee = pr.assignee
+    )
   }
 }
 
@@ -70,21 +73,21 @@ sealed trait DraftPullRequest extends Product with Serializable {
 object DraftPullRequest {
 
   final case class DraftPullRequestData(
-    title: String,
-    head: String,
-    base: String,
-    body: String,
-    maintainer_can_modify: Option[Boolean] = Some(true),
-    draft: Boolean = true)
-    extends DraftPullRequest
+      title: String,
+      head: String,
+      base: String,
+      body: String,
+      maintainer_can_modify: Option[Boolean] = Some(true),
+      draft: Boolean = true)
+      extends DraftPullRequest
 
   final case class DraftPullRequestIssue(
-    issue: Int,
-    head: String,
-    base: String,
-    maintainer_can_modify: Option[Boolean] = Some(true),
-    draft: Boolean = true)
-    extends DraftPullRequest
+      issue: Int,
+      head: String,
+      base: String,
+      maintainer_can_modify: Option[Boolean] = Some(true),
+      draft: Boolean = true)
+      extends DraftPullRequest
 
 }
 

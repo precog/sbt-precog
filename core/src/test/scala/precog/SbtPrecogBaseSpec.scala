@@ -17,11 +17,11 @@
 package precog
 
 import java.io.File
-import java.nio.file.{Files, Path}
+import java.nio.file.Files
+import java.nio.file.Path
 
 import org.specs2.main.CommandLine
 import org.specs2.mutable.Specification
-
 import sbt.librarymanagement.ModuleID
 import sbt.util.Level
 import sbttrickle.metadata.ModuleUpdateData
@@ -52,7 +52,8 @@ class SbtPrecogBaseSpec(params: CommandLine) extends Specification {
       val mud = ModuleUpdateData(module, dep, "2.3.7", repo, url)
       val logger = TestLogger()
 
-      base.updateDependencies("precog-quasar", Set(mud), versions, logger) must throwA[RuntimeException]
+      base.updateDependencies("precog-quasar", Set(mud), versions, logger) must throwA[
+        RuntimeException]
     }
 
     "log 'version: revision'" in {

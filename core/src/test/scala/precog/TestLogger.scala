@@ -16,10 +16,11 @@
 
 package precog
 
-import sbt.util.{Level, Logger}
-
 import scala.collection.immutable.Map
 import scala.collection.mutable.Buffer
+
+import sbt.util.Level
+import sbt.util.Logger
 
 //noinspection ReferenceMustBePrefixed
 class TestLogger extends Logger {

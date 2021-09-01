@@ -17,27 +17,33 @@
 package precog
 
 import java.io.File
-import java.nio.file.{Files, Path}
-
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.execute.ResultImplicits
-import org.specs2.main.CommandLine
-import org.specs2.mutable.Specification
-
-import cats.Id
-import cats.effect.{Clock, IO}
-import cats.implicits._
-import github4s.GHError.BasicError
-import github4s.GHResponse
-import github4s.domain.{Label, Pagination, PullRequestBase}
-import precog.algebras.Runner
-import precog.domain.PullRequestDraft
-
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.collection.immutable
 import scala.concurrent.duration.TimeUnit
 import scala.sys.process.ProcessLogger
 
-class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.specs2.ScalaCheck with ResultImplicits {
+import cats.Id
+import cats.effect.Clock
+import cats.effect.IO
+import cats.implicits._
+import github4s.GHError.BasicError
+import github4s.GHResponse
+import github4s.domain.Label
+import github4s.domain.Pagination
+import github4s.domain.PullRequestBase
+import org.scalacheck.Arbitrary
+import org.scalacheck.Gen
+import org.specs2.execute.ResultImplicits
+import org.specs2.main.CommandLine
+import org.specs2.mutable.Specification
+import precog.algebras.Runner
+import precog.domain.PullRequestDraft
+
+class AutoBumpObjectSpec(params: CommandLine)
+    extends Specification
+    with org.specs2.ScalaCheck
+    with ResultImplicits {
   import AutoBumpObjectSpec._
 
   val tmpdir: Path = params.value("tmpdir") map { f =>
@@ -47,14 +53,16 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
     file.toPath.pp("tmpdir: ")
   } getOrElse Files.createTempDirectory(getClass.getSimpleName).pp("tmpdir: ")
 
-
   "ChangeLabel" should {
     import AutoBump.ChangeLabel
     def abChangeLabelGen: Gen[ChangeLabel] = Gen.oneOf(ChangeLabel.values)
     implicit def abChangeLabel: Arbitrary[ChangeLabel] = Arbitrary(abChangeLabelGen)
 
     "include all values" in {
-      ChangeLabel.values.toSet mustEqual Set(ChangeLabel.Revision, ChangeLabel.Feature, ChangeLabel.Breaking)
+      ChangeLabel.values.toSet mustEqual Set(
+        ChangeLabel.Revision,
+        ChangeLabel.Feature,
+        ChangeLabel.Breaking)
     }
 
     "implement equality" in prop { (a: ChangeLabel, b: ChangeLabel) =>
@@ -69,10 +77,11 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
       ChangeLabel("version: breaking") must beSome(ChangeLabel.Breaking)
     }
 
-    "deserialize with pattern recognition" in prop { (prefix: String, cl: ChangeLabel, suffix: String) =>
-      prefix + cl.label + suffix must beLike {
-        case ChangeLabel(changeLabel) => cl mustEqual changeLabel
-      }
+    "deserialize with pattern recognition" in prop {
+      (prefix: String, cl: ChangeLabel, suffix: String) =>
+        prefix + cl.label + suffix must beLike {
+          case ChangeLabel(changeLabel) => cl mustEqual changeLabel
+        }
     }
 
     "serialize" in {
@@ -242,13 +251,16 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
         case Pagination(page, perPage) =>
           val chunk = list.slice((page - 1) * perPage, page * perPage)
           val nextPage = page + 1
-          val headers = if (list.size > page * perPage) Map(
-            "Link" ->
-              s"""
-                 |<https://api.github.com/nothing/really?page=$nextPage
-                 |&per_page=$perPage>; rel="next"
-                 |""".stripMargin.split('\n').mkString
-          ) else Map.empty[String, String]
+          val headers =
+            if (list.size > page * perPage)
+              Map(
+                "Link" ->
+                  s"""
+                     |<https://api.github.com/nothing/really?page=$nextPage
+                     |&per_page=$perPage>; rel="next"
+                     |""".stripMargin.split('\n').mkString
+              )
+            else Map.empty[String, String]
           IO.pure(GHResponse(chunk.asRight, 200, headers))
       }
       val stream = autoPage[IO, Int](Pagination(1, 3), "retrieveAllPages")(chunker)
@@ -261,13 +273,16 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
         case Pagination(page, perPage) =>
           val chunk = (page until perPage).toList
           val nextPage = perPage + chunk.size + 4
-          val headers = if (page < 10) Map(
-            "Link" ->
-              s"""
-                 |<https://api.github.com/nothing/really?page=$perPage
-                 |&per_page=$nextPage>; rel="next"
-                 |""".stripMargin.split('\n').mkString
-          ) else Map.empty[String, String]
+          val headers =
+            if (page < 10)
+              Map(
+                "Link" ->
+                  s"""
+                     |<https://api.github.com/nothing/really?page=$perPage
+                     |&per_page=$nextPage>; rel="next"
+                     |""".stripMargin.split('\n').mkString
+              )
+            else Map.empty[String, String]
           if (page > 1) IO.pure(GHResponse(BasicError("test").asLeft, 200, headers))
           else IO.pure(GHResponse(chunk.asRight, 200, headers))
       }
@@ -282,11 +297,26 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
 
     "get existing pull request branch" in {
       implicit val clock: Clock[IO] = clockIO
-      val pr = PullRequestDraft(10, 5, "sha1", "open", "Test PR", None, false, false, "html",
-        "yesterday", None, None, None, None,
+      val pr = PullRequestDraft(
+        10,
+        5,
+        "sha1",
+        "open",
+        "Test PR",
+        None,
+        false,
+        false,
+        "html",
+        "yesterday",
+        None,
+        None,
+        None,
+        None,
         Some(PullRequestBase(None, "master", "sha3", None, None)),
         Some(PullRequestBase(None, "trickle/test", "sha2", None, None)),
-        None, None)
+        None,
+        None
+      )
 
       getBranch[IO](Some(pr)).unsafeRunSync() mustEqual ("" -> "trickle/test")
     }
@@ -307,11 +337,26 @@ class AutoBumpObjectSpec(params: CommandLine) extends Specification with org.spe
     import AutoBump._
 
     "identify autobump pull request" in {
-      val pr = PullRequestDraft(10, 5, "sha1", "open", "Test PR", None, false, false, "html",
-        "yesterday", None, None, None, None,
+      val pr = PullRequestDraft(
+        10,
+        5,
+        "sha1",
+        "open",
+        "Test PR",
+        None,
+        false,
+        false,
+        "html",
+        "yesterday",
+        None,
+        None,
+        None,
+        None,
         Some(PullRequestBase(None, "master", "sha3", None, None)),
         Some(PullRequestBase(None, "trickle/test", "sha2", None, None)),
-        None, None)
+        None,
+        None
+      )
 
       def toLabel: String => Label =
         Label(None, _, "https://api.github.com/label/none", "#ff0000", None)
@@ -384,8 +429,7 @@ object AutoBumpObjectSpec {
     override def !(command: immutable.Seq[String]): Id[List[String]] = ???
     override def !!(command: immutable.Seq[String]): Id[List[String]] = ???
 
-    override def ?(
-        command: immutable.Seq[String],
-        processLogger: ProcessLogger): Id[Int] = result
+    override def ?(command: immutable.Seq[String], processLogger: ProcessLogger): Id[Int] =
+      result
   }
 }
