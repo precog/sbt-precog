@@ -37,6 +37,7 @@ import sbt.Keys._
 import sbt.complete.DefaultParsers.fileParser
 import sbt.util.Logger
 import sbt.{Logger => _, _}
+import sbt.io.{IO => SIO}
 import sbtghactions.GenerativeKeys._
 import sbtghactions.GitHubActionsPlugin.autoImport._
 import sbtghactions.{GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}
@@ -131,6 +132,14 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Ywarn-dead-code",
         "-Xfuture")
 
+    val scalafmtSettings: Seq[Def.Setting[_]] = Seq(
+      SettingKey[Unit]("scalafmtGenerateConfig") :=
+        SIO.write(
+          // writes to file once when build is loaded
+          file(".scalafmt-common.conf"),
+          SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt.conf")))
+        ))
+
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
@@ -138,7 +147,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
       })
 
-    lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
+  lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
       outputStrategy := Some(StdoutOutput),
       autoCompilerPlugins := true,
       autoAPIMappings := true,
@@ -190,7 +199,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       scalacOptions in (Compile, doc) -= "-Xfatal-warnings",
 
       unsafeEvictionsCheck := unsafeEvictionsCheckTask.value,
-    ) ++ headerLicenseSettings
+    ) ++ scalafmtSettings ++ headerLicenseSettings
 
     lazy val commonPublishSettings: Seq[Def.Setting[_]] = Seq(
       licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),

@@ -3,6 +3,7 @@ libraryDependencies += "org.yaml" % "snakeyaml" % "1.26"
 addSbtPlugin("io.crashbox"       % "sbt-gpg"            % "0.2.1")
 addSbtPlugin("com.codecommit"    % "sbt-github-actions" % "0.10.1")
 addSbtPlugin("de.heikoseeberger" % "sbt-header"         % "5.6.0")
+addSbtPlugin("org.scalameta"     % "sbt-scalafmt"       % "2.4.3")
 addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.3-8f135be")
 
 val specs2Version = "4.10.0"
