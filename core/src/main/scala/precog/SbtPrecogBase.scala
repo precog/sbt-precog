@@ -234,8 +234,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowSbtCommand := s"$$SBT",
       githubWorkflowJavaVersions := Seq(
         "adopt@1.11",
-        "graalvm-ce-java11@21.1.0",
-        "graalvm-ce-java8@21.1.0"),
+        "graalvm-ce-java11@21.1.0"),
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
