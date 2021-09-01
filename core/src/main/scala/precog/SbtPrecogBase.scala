@@ -147,12 +147,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Xfuture")
 
     val scalafmtSettings: Seq[Def.Setting[_]] = Seq(
-      SettingKey[Unit]("scalafmtGenerateConfig") :=
+      SettingKey[Unit]("scalafmtGenerateConfig") := {
         SIO.write(
           // writes to file once when build is loaded
           file(".scalafmt-common.conf"),
-          SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt.conf")))
-        ))
+          SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt-common.conf")))
+        )
+        if (!file(".scalafmt.conf").exists())
+          SIO.write(
+            file(".scalafmt.conf"),
+            SIO.read(SIO.toFile(this.getClass.getResource("/core/scalafmt.conf"))))
+      })
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
