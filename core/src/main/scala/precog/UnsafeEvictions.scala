@@ -17,14 +17,21 @@
 package precog
 
 import sbt._
-import librarymanagement.{ModuleFilter, ModuleDescriptor, ScalaModuleInfo}
+import sbt.librarymanagement.ModuleDescriptor
+import sbt.librarymanagement.ModuleFilter
+import sbt.librarymanagement.ScalaModuleInfo
 
 final case class UnsafeEvictionsException(prefix: String, evictions: Seq[EvictionPair])
-    extends RuntimeException(s"$prefix: ${evictions.map(e => s"${e.organization}:${e.name}").mkString(", ")}")
+    extends RuntimeException(
+      s"$prefix: ${evictions.map(e => s"${e.organization}:${e.name}").mkString(", ")}")
 
 object UnsafeEvictions {
-  /** Performs logging and exception-throwing given report and configurations */
-  def check(currentProject: String,
+
+  /**
+   * Performs logging and exception-throwing given report and configurations
+   */
+  def check(
+      currentProject: String,
       module: ModuleDescriptor,
       isFatal: Boolean,
       conf: Seq[(ModuleFilter, VersionNumberCompatibility)],
@@ -39,12 +46,14 @@ object UnsafeEvictions {
     ew.lines.foreach(line => log.log(logLevel, s"[${currentProject}] $line"))
     if (isFatal && ew.binaryIncompatibleEvictionExists) {
       val evictions = ew.scalaEvictions ++ ew.directEvictions ++ ew.transitiveEvictions
-       throw UnsafeEvictionsException("Unsafe evictions detected", evictions)
+      throw UnsafeEvictionsException("Unsafe evictions detected", evictions)
     }
     report
   }
 
-  /** Applies compatibility configuration, and, otherwise, assume it's compatible */
+  /**
+   * Applies compatibility configuration, and, otherwise, assume it's compatible
+   */
   private def guessCompatible(confs: Seq[(ModuleFilter, VersionNumberCompatibility)])
       : ((ModuleID, Option[ModuleID], Option[ScalaModuleInfo])) => Boolean = {
     case (m1, Some(m2), _) =>
@@ -54,17 +63,21 @@ object UnsafeEvictions {
           val r2 = VersionNumber(m2.revision)
           vnc.isCompatible(r1, r2)
       }
-    case _                 => true
+    case _ => true
   }
 
-  /** Creates a ModuleFilter that does a strict organization matching */
+  /**
+   * Creates a ModuleFilter that does a strict organization matching
+   */
   trait IsOrg {
     import sbt.librarymanagement.DependencyFilter
 
-    /** Creates a ModuleFilter that does a strict organization matching */
-    def apply(org: String): ModuleFilter = DependencyFilter.fnToModuleFilter(_.organization == org)
+    /**
+     * Creates a ModuleFilter that does a strict organization matching
+     */
+    def apply(org: String): ModuleFilter =
+      DependencyFilter.fnToModuleFilter(_.organization == org)
   }
 
   object IsOrg extends IsOrg
 }
-

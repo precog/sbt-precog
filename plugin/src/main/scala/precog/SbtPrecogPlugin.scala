@@ -16,9 +16,10 @@
 
 package precog
 
-import sbt._, Keys._
-
 import scala.collection.immutable.Seq
+
+import sbt.Keys._
+import sbt._
 
 object SbtPrecogPlugin extends SbtPrecogBase {
 
@@ -26,31 +27,26 @@ object SbtPrecogPlugin extends SbtPrecogBase {
 
   object autoImport extends autoImport {
 
-    lazy val noPublishSettings = Seq(
-      publish := {},
-      publishLocal := {},
-      publishArtifact := false,
-      skip in publish := true)
+    lazy val noPublishSettings =
+      Seq(publish := {}, publishLocal := {}, publishArtifact := false, skip in publish := true)
   }
 
   import autoImport._
 
   override def projectSettings =
     super.projectSettings ++
-    addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; publish") ++
-    Seq(
-      sbtPlugin := true,
-      publishMavenStyle := true)
+      addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; publish") ++
+      Seq(sbtPlugin := true, publishMavenStyle := true)
 
   override def buildSettings =
     super.buildSettings ++
-    Seq(
-      secrets += file("credentials.yml.enc"),
-
-      transferPublishAndTagResources := {
-        transferToBaseDir("plugin", (ThisBuild / baseDirectory).value, "credentials.yml.enc")
-        transferPublishAndTagResources.value
-      })
+      Seq(
+        secrets += file("credentials.yml.enc"),
+        transferPublishAndTagResources := {
+          transferToBaseDir("plugin", (ThisBuild / baseDirectory).value, "credentials.yml.enc")
+          transferPublishAndTagResources.value
+        }
+      )
 
   protected val autoImporter = autoImport
 }

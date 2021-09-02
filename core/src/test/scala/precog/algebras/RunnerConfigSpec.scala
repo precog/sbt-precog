@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Precog Data
+ * Copyright 2021 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package precog.algebras
 
 import org.specs2.main.CommandLine
-
 import precog.algebras.Runner.RunnerConfig
 import sbt.file
 
@@ -27,13 +26,15 @@ class RunnerConfigSpec(params: CommandLine) extends org.specs2.mutable.Specifica
       val config = Runner.DefaultConfig
       config mustEqual RunnerConfig(None, Map.empty, Nil, Runner.DefaultSecretReplacement)
       config.cd(file("./target")) mustEqual config.copy(cwd = Some(file("./target")))
-      config.withEnv("X" -> "Y", "W" -> "Z") mustEqual config.copy(env = Map("X" -> "Y", "W" -> "Z"))
+      config.withEnv("X" -> "Y", "W" -> "Z") mustEqual config.copy(env =
+        Map("X" -> "Y", "W" -> "Z"))
       config.hide("password") mustEqual config.copy(hide = List("password"))
     }
 
     "append instead of replace" in {
       val config = Runner.DefaultConfig
-      config.withEnv("X" -> "Y").withEnv("W" -> "Z") mustEqual config.copy(env = Map("X" -> "Y", "W" -> "Z"))
+      config.withEnv("X" -> "Y").withEnv("W" -> "Z") mustEqual config.copy(env =
+        Map("X" -> "Y", "W" -> "Z"))
       config.hide("xyzzy").hide("foobar") mustEqual config.copy(hide = List("foobar", "xyzzy"))
     }
 
@@ -41,7 +42,10 @@ class RunnerConfigSpec(params: CommandLine) extends org.specs2.mutable.Specifica
       val config = Runner.DefaultConfig
       val input = "this xyzzy that print_foobar"
       Runner.DefaultSecretReplacement mustEqual "*****"
-      config.hide("xyzzy").hide("foobar").sanitize(input) mustEqual "this ***** that print_*****"
+      config
+        .hide("xyzzy")
+        .hide("foobar")
+        .sanitize(input) mustEqual "this ***** that print_*****"
     }
   }
 }

@@ -29,10 +29,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.12]
-        java:
-          - adopt@1.11
-          - graalvm-ce-java11@21.1.0
-          - graalvm-ce-java8@21.1.0
+        java: [adopt@1.11, graalvm-ce-java11@21.1.0]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)

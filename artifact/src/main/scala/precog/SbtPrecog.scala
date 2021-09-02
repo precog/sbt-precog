@@ -16,12 +16,12 @@
 
 package precog
 
-import sbt._, Keys._
+import scala.collection.immutable.Seq
 
+import sbt.Keys._
+import sbt._
 import sbtghactions.GenerativeKeys.githubWorkflowDependencyPatterns
 import sbtghpackages.GitHubPackagesPlugin
-
-import scala.collection.immutable.Seq
 
 object SbtPrecog extends SbtPrecogBase {
 
@@ -29,11 +29,8 @@ object SbtPrecog extends SbtPrecogBase {
 
   object autoImport extends autoImport {
 
-    lazy val noPublishSettings = Seq(
-      publish := {},
-      publishLocal := {},
-      publishArtifact := false,
-      skip in publish := true)
+    lazy val noPublishSettings =
+      Seq(publish := {}, publishLocal := {}, publishArtifact := false, skip in publish := true)
   }
 
   import GitHubPackagesPlugin.autoImport._
@@ -43,13 +40,15 @@ object SbtPrecog extends SbtPrecogBase {
 
   override def projectSettings =
     super.projectSettings ++
-    addCommandAlias("releaseSnapshot", "; project /; reload; checkLocalEvictions; +publish") ++
-    Seq(
-      githubOwner := "precog",
-      githubTokenSource := TokenSource.Environment("GITHUB_TOKEN") || githubTokenSource.value,
-
-      resolvers += Resolver.githubPackages("precog"),
-      resolvers += Resolver.githubPackages("slamdata"))   // TODO remove
+      addCommandAlias(
+        "releaseSnapshot",
+        "; project /; reload; checkLocalEvictions; +publish") ++
+      Seq(
+        githubOwner := "precog",
+        githubTokenSource := TokenSource.Environment("GITHUB_TOKEN") || githubTokenSource.value,
+        resolvers += Resolver.githubPackages("precog"),
+        resolvers += Resolver.githubPackages("slamdata")
+      ) // TODO remove
 
   protected val autoImporter = autoImport
 }

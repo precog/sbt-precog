@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Precog Data
+ * Copyright 2021 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 
 package precog
 
-import github4s.domain.{Label, PullRequestBase}
+import github4s.domain.Label
+import github4s.domain.PullRequestBase
 import precog.domain.PullRequestDraft
 
 case class TestEnv(
@@ -35,18 +36,32 @@ case class TestEnv(
       from: String,
       to: String,
       state: String,
-      draft: Boolean)
-      : TestEnv = {
+      draft: Boolean): TestEnv = {
     val prList = prs.getOrElse((owner, repo), Nil)
     val pr = PullRequestDraft(
-      issuesCounter, issuesCounter, s"node_$issuesCounter", state, title, Some(body), false, draft,
-      s"https://github.com/$owner/$repo", issuesCounter.toString, None, None, None, None,
+      issuesCounter,
+      issuesCounter,
+      s"node_$issuesCounter",
+      state,
+      title,
+      Some(body),
+      false,
+      draft,
+      s"https://github.com/$owner/$repo",
+      issuesCounter.toString,
+      None,
+      None,
+      None,
+      None,
       Some(PullRequestBase(Some(to), to, (issuesCounter + 1).toString, None, None)),
       Some(PullRequestBase(Some(from), from, issuesCounter.toString, None, None)),
-      None, None)
+      None,
+      None
+    )
     val refSet = refs.getOrElse((owner, repo), Set.empty)
     copy(
-      prs = prs.updated((owner, repo), pr :: prList), issuesCounter = issuesCounter + 1,
+      prs = prs.updated((owner, repo), pr :: prList),
+      issuesCounter = issuesCounter + 1,
       refs = refs.updated((owner, repo), refSet + to + from))
   }
 

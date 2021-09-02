@@ -17,18 +17,21 @@
 package precog.interpreters
 
 import java.nio.file.Files
+import scala.collection.immutable.Seq
+import scala.collection.mutable
+import scala.sys.process.Process
+import scala.sys.process.ProcessLogger
 
 import cats.effect.Sync
 import cats.implicits._
 import precog.algebras.Runner
-import precog.algebras.Runner.{DefaultConfig, RunnerConfig, RunnerException}
+import precog.algebras.Runner.DefaultConfig
+import precog.algebras.Runner.RunnerConfig
+import precog.algebras.Runner.RunnerException
 import sbt.util.Logger
 
-import scala.collection.immutable.Seq
-import scala.collection.mutable
-import scala.sys.process.{Process, ProcessLogger}
-
-final case class SyncRunner[F[_] : Sync](log: Logger, config: RunnerConfig = DefaultConfig) extends Runner[F] {
+final case class SyncRunner[F[_]: Sync](log: Logger, config: RunnerConfig = DefaultConfig)
+    extends Runner[F] {
   import SyncRunner._
 
   override def withConfig(config: RunnerConfig): Runner[F] = SyncRunner(log, config)
@@ -62,7 +65,7 @@ final case class SyncRunner[F[_] : Sync](log: Logger, config: RunnerConfig = Def
       stderr <- F.pure(mutable.Buffer[String]())
       processLogger <- F.pure(getProcessLogger(Some(stdout), Some(stderr), merge))
       _ <- (this ? (command, processLogger))
-        .ensureOr(RunnerException(_, command.toList, stderr.toList)) (_ == 0)
+        .ensureOr(RunnerException(_, command.toList, stderr.toList))(_ == 0)
     } yield stdout.toList
   }
 
@@ -77,8 +80,7 @@ final case class SyncRunner[F[_] : Sync](log: Logger, config: RunnerConfig = Def
   def getProcessLogger(
       out: Option[mutable.Buffer[String]] = None,
       err: Option[mutable.Buffer[String]] = None,
-      merge: Boolean = false)
-      : ProcessLogger = {
+      merge: Boolean = false): ProcessLogger = {
     val stdout = { line: String =>
       log.info(line)
       out.foreach(_.append(line))
@@ -99,8 +101,8 @@ final case class SyncRunner[F[_] : Sync](log: Logger, config: RunnerConfig = Def
 object SyncRunner {
   def quoteIfNeeded(s: String): String = {
     if (s.matches("[-\\w/\\\\:.]+")) s
-    else if (s.contains("'")) f"$$'${s.map(c => if (c == '\'') "\\'" else c.toString).mkString}%s'"
+    else if (s.contains("'"))
+      f"$$'${s.map(c => if (c == '\'') "\\'" else c.toString).mkString}%s'"
     else f"'$s%s'"
   }
 }
-

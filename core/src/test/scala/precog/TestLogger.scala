@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Precog Data
+ * Copyright 2021 Precog Data
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@
 
 package precog
 
-import sbt.util.{Level, Logger}
-
 import scala.collection.immutable.Map
 import scala.collection.mutable.Buffer
+
+import sbt.util.Level
+import sbt.util.Logger
 
 //noinspection ReferenceMustBePrefixed
 class TestLogger extends Logger {

@@ -22,3 +22,4 @@ tags
 /signing-secret.pgp.enc
 /common-secrets.yml.enc
 /plugin/src/main/resources/plugin/credentials.yml
+.scalafmt-common.conf

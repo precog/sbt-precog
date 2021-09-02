@@ -22,13 +22,16 @@ import github4s.GHResponse
 import github4s.http.HttpClient
 import precog.algebras.References
 
-class ReferencesInterpreter[F[_] : Sync](
-    client: HttpClient[F],
-    accessToken: Option[String])
+class ReferencesInterpreter[F[_]: Sync](client: HttpClient[F], accessToken: Option[String])
     extends References[F] {
-  def deleteReference(owner: String, repo: String, ref: String, headers: Map[String, String]): F[GHResponse[Unit]] = {
+  def deleteReference(
+      owner: String,
+      repo: String,
+      ref: String,
+      headers: Map[String, String]): F[GHResponse[Unit]] = {
     for {
-      _ <- Sync[F].delay(assert(ref.matches("refs/(heads|tags)/.+"), f"Invalid reference $ref%s"))
+      _ <- Sync[F].delay(
+        assert(ref.matches("refs/(heads|tags)/.+"), f"Invalid reference $ref%s"))
       res <- client.delete(accessToken, f"repos/$owner%s/$repo%s/git/$ref%s")
     } yield res
   }

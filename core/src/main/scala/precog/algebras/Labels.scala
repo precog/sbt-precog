@@ -17,61 +17,80 @@
 package precog.algebras
 
 import github4s.GHResponse
-import github4s.domain.{Label, Pagination}
+import github4s.domain.Label
+import github4s.domain.Pagination
 
 trait Labels[F[_]] {
+
   /**
    * List the labels assigned to an Issue
    *
-   * @param owner of the repo
-   * @param repo name of the repo
-   * @param number Issue number
-   * @param headers optional user headers to include in the request
-   * @return a GHResponse with the list of labels for the Issue.
+   * @param owner
+   *   of the repo
+   * @param repo
+   *   name of the repo
+   * @param number
+   *   Issue number
+   * @param headers
+   *   optional user headers to include in the request
+   * @return
+   *   a GHResponse with the list of labels for the Issue.
    */
   def listLabels(
-                  owner: String,
-                  repo: String,
-                  number: Int,
-                  pagination: Option[Pagination] = None,
-                  headers: Map[String, String] = Map()
-                ): F[GHResponse[List[Label]]]
+      owner: String,
+      repo: String,
+      number: Int,
+      pagination: Option[Pagination] = None,
+      headers: Map[String, String] = Map()
+  ): F[GHResponse[List[Label]]]
 
   /**
    * Add the specified labels to an Issue
    *
-   * @param owner of the repo
-   * @param repo name of the repo
-   * @param number Issue number
-   * @param labels the list of labels to add to the issue
-   * @param headers optional user headers to include in the request
-   * @return a GHResponse with the list of labels added to the Issue.
+   * @param owner
+   *   of the repo
+   * @param repo
+   *   name of the repo
+   * @param number
+   *   Issue number
+   * @param labels
+   *   the list of labels to add to the issue
+   * @param headers
+   *   optional user headers to include in the request
+   * @return
+   *   a GHResponse with the list of labels added to the Issue.
    */
   def addLabels(
-                 owner: String,
-                 repo: String,
-                 number: Int,
-                 labels: List[String],
-                 headers: Map[String, String] = Map()
-               ): F[GHResponse[List[Label]]]
+      owner: String,
+      repo: String,
+      number: Int,
+      labels: List[String],
+      headers: Map[String, String] = Map()
+  ): F[GHResponse[List[Label]]]
 
   /**
    * Remove the specified label from an Issue
    *
-   * @param owner of the repo
-   * @param repo name of the repo
-   * @param number Issue number
-   * @param label the name of the label to remove from the issue
-   * @param headers optional user headers to include in the request
-   * @return a GHResponse with the list of labels removed from the Issue.
+   * @param owner
+   *   of the repo
+   * @param repo
+   *   name of the repo
+   * @param number
+   *   Issue number
+   * @param label
+   *   the name of the label to remove from the issue
+   * @param headers
+   *   optional user headers to include in the request
+   * @return
+   *   a GHResponse with the list of labels removed from the Issue.
    */
   def removeLabel(
-                   owner: String,
-                   repo: String,
-                   number: Int,
-                   label: String,
-                   headers: Map[String, String] = Map()
-                 ): F[GHResponse[List[Label]]]
+      owner: String,
+      repo: String,
+      number: Int,
+      label: String,
+      headers: Map[String, String] = Map()
+  ): F[GHResponse[List[Label]]]
 
 }
 

@@ -17,11 +17,16 @@
 package precog.algebras
 
 import github4s.GHResponse
-import github4s.domain.{NewPullRequest, PRFilter, Pagination}
+import github4s.domain.NewPullRequest
+import github4s.domain.PRFilter
+import github4s.domain.Pagination
 import precog.domain._
 
 trait DraftPullRequests[F[_]] {
-  /** Create pull request as draft. */
+
+  /**
+   * Create pull request as draft.
+   */
   def draftPullRequest(
       owner: String,
       repo: String,
@@ -29,33 +34,38 @@ trait DraftPullRequests[F[_]] {
       head: String,
       base: String,
       maintainerCanModify: Option[Boolean] = Some(true),
-      headers: Map[String, String] = Map.empty)
-      : F[GHResponse[PullRequestDraft]]
+      headers: Map[String, String] = Map.empty): F[GHResponse[PullRequestDraft]]
 
-  /** List both draft and non-draft pull requests, but return their draft flag. */
+  /**
+   * List both draft and non-draft pull requests, but return their draft flag.
+   */
   def listPullRequests(
       owner: String,
       repo: String,
       filters: List[PRFilter] = Nil,
       pagination: Option[Pagination] = None,
-      headers: Map[String, String] = Map())
-      : F[GHResponse[List[PullRequestDraft]]]
+      headers: Map[String, String] = Map()): F[GHResponse[List[PullRequestDraft]]]
 
   def updatePullRequest(
       owner: String,
       repo: String,
       number: Int,
       fields: PullRequestUpdate,
-      headers: Map[String, String] = Map())
-      : F[GHResponse[PullRequestDraft]]
+      headers: Map[String, String] = Map()): F[GHResponse[PullRequestDraft]]
 
   /**
    * Mark pull request as ready to review, removing its "draft" status.
-   * @return True if successful.
+   * @return
+   *   True if successful.
    */
-  def markReadyForReview(owner: String, repo: String, id: String, headers: Map[String, String] = Map()): F[GHResponse[Boolean]]
+  def markReadyForReview(
+      owner: String,
+      repo: String,
+      id: String,
+      headers: Map[String, String] = Map()): F[GHResponse[Boolean]]
 }
 
 object DraftPullRequests {
-  def apply[F[_]](implicit pullRequests: DraftPullRequests[F]): DraftPullRequests[F] = pullRequests
+  def apply[F[_]](implicit pullRequests: DraftPullRequests[F]): DraftPullRequests[F] =
+    pullRequests
 }

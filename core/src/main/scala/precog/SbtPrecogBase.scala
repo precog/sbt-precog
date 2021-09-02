@@ -16,51 +16,66 @@
 
 package precog
 
-import java.io.{File, IOException}
+import java.io.File
+import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths, StandardOpenOption}
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
-
-import org.http4s.client.asynchttpclient.AsyncHttpClient
-import org.yaml.snakeyaml.Yaml
-
-import _root_.io.crashbox.gpg.SbtGpg
-import cats.effect.IO.contextShift
-import cats.effect.{Clock, ContextShift, IO}
-import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
-import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
-import precog.algebras.{DraftPullRequests, Github, Labels, References, Runner}
-import precog.interpreters.{GithubInterpreter, SyncRunner}
-import sbt.Def.Initialize
-import sbt.Keys._
-import sbt.complete.DefaultParsers.fileParser
-import sbt.util.Logger
-import sbt.{Logger => _, _}
-import sbtghactions.GenerativeKeys._
-import sbtghactions.GitHubActionsPlugin.autoImport._
-import sbtghactions.{GitHubActionsPlugin, Ref, RefPredicate, WorkflowJob, WorkflowStep}
-import sbttrickle.TricklePlugin
-import sbttrickle.TricklePlugin.autoImport._
-import sbttrickle.metadata.ModuleUpdateData
-
 import scala.collection.JavaConverters._
-import scala.collection.immutable.{Seq, Set}
+import scala.collection.immutable.Seq
+import scala.collection.immutable.Set
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.sys.process._
 import scala.util.matching.Regex
+
+import _root_.io.crashbox.gpg.SbtGpg
+import cats.effect.Clock
+import cats.effect.ContextShift
+import cats.effect.IO
+import cats.effect.IO.contextShift
+import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
+import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
+import org.http4s.client.asynchttpclient.AsyncHttpClient
+import org.yaml.snakeyaml.Yaml
+import precog.algebras.DraftPullRequests
+import precog.algebras.Github
+import precog.algebras.Labels
+import precog.algebras.References
+import precog.algebras.Runner
+import precog.interpreters.GithubInterpreter
+import precog.interpreters.SyncRunner
+import sbt.Def.Initialize
+import sbt.Keys._
+import sbt.complete.DefaultParsers.fileParser
+import sbt.io.{IO => SIO}
+import sbt.util.Logger
+import sbt.{Logger => _, _}
+import sbtghactions.GenerativeKeys._
+import sbtghactions.GitHubActionsPlugin
+import sbtghactions.GitHubActionsPlugin.autoImport._
+import sbtghactions.Ref
+import sbtghactions.RefPredicate
+import sbtghactions.WorkflowJob
+import sbtghactions.WorkflowStep
+import sbttrickle.TricklePlugin
+import sbttrickle.TricklePlugin.autoImport._
+import sbttrickle.metadata.ModuleUpdateData
 
 abstract class SbtPrecogBase extends AutoPlugin {
   private var foundLocalEvictions: Set[(String, String)] = Set()
   val VersionsPath = ".versions.json"
 
-  private lazy val internalPublishAsOSSProject = settingKey[Boolean]("Internal proxy to lift the scoping on publishAsOSSProject")
+  private lazy val internalPublishAsOSSProject =
+    settingKey[Boolean]("Internal proxy to lift the scoping on publishAsOSSProject")
 
   override def requires =
     plugins.JvmPlugin &&
-    GitHubActionsPlugin &&
-    SbtGpg &&
-    TricklePlugin
+      GitHubActionsPlugin &&
+      SbtGpg &&
+      TricklePlugin
 
   override def trigger = allRequirements
 
@@ -77,7 +92,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     def scalacOptions_2_10(strict: Boolean): Seq[String] = {
       val global = Seq(
-        "-encoding", "UTF-8",
+        "-encoding",
+        "UTF-8",
         "-deprecation",
         "-language:existentials",
         "-language:higherKinds",
@@ -100,9 +116,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     }
 
     def scalacOptions_2_11(strict: Boolean): Seq[String] = {
-      val global = Seq(
-        "-Ypartial-unification",
-        "-Ywarn-unused-import")
+      val global = Seq("-Ypartial-unification", "-Ywarn-unused-import")
 
       if (strict)
         global :+ "-Ydelambdafy:method"
@@ -115,7 +129,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
     def scalacOptions_2_13(strict: Boolean): Seq[String] = {
       val numCPUs = java.lang.Runtime.getRuntime.availableProcessors()
       Seq(
-        s"-Ybackend-parallelism", numCPUs.toString,
+        s"-Ybackend-parallelism",
+        numCPUs.toString,
         "-Wunused:imports",
         "-Wdead-code",
         "-Wnumeric-widen",
@@ -131,24 +146,34 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "-Ywarn-dead-code",
         "-Xfuture")
 
+    val scalafmtSettings: Seq[Def.Setting[_]] = Seq(
+      SettingKey[Unit]("scalafmtGenerateConfig") := {
+        // writes to file once when build is loaded
+        SIO.write(
+          file(".scalafmt-common.conf"),
+          resourceContents("/core/scalafmt-common.conf")
+        )
+        if (!file(".scalafmt.conf").exists())
+          SIO.write(file(".scalafmt.conf"), resourceContents("/core/scalafmt.conf"))
+      })
+
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
       licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       checkHeaders := {
         if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
-      })
+      }
+    )
 
     lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
       outputStrategy := Some(StdoutOutput),
       autoCompilerPlugins := true,
       autoAPIMappings := true,
-
-      addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.13.1" cross CrossVersion.full),
-      addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
+      addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.1" cross CrossVersion.full),
+      addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
       // default to true
       scalacStrictMode := true,
-
       scalacOptions ++= {
         val strict = scalacStrictMode.value
 
@@ -161,97 +186,85 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
             mainline.filterNot(scalacOptionsRemoved_2_13.contains)
 
-          case Some((2, 12)) => scalacOptions_2_10(strict) ++ scalacOptions_2_11(strict) ++ scalacOptions_2_12(strict)
+          case Some((2, 12)) =>
+            scalacOptions_2_10(strict) ++ scalacOptions_2_11(strict) ++ scalacOptions_2_12(
+              strict)
 
           case Some((2, 11)) => scalacOptions_2_10(strict) ++ scalacOptions_2_11(strict)
 
           case _ => scalacOptions_2_10(strict)
         }
       },
-
       scalacOptions --= {
         CrossVersion.partialVersion(scalaVersion.value) match {
           case Some((2, n)) if n >= 13 => Some("-Ypartial-unification")
           case _ => None
         }
       },
-
       scalacOptions ++= {
         if (githubIsWorkflowBuild.value && scalacStrictMode.value)
           Seq("-Xfatal-warnings")
         else
           Seq()
       },
-
-      scalacOptions in (Test, console) --= Seq(
-        "-Yno-imports",
-        "-Ywarn-unused-import"),
-
+      scalacOptions in (Test, console) --= Seq("-Yno-imports", "-Ywarn-unused-import"),
       scalacOptions in (Compile, doc) -= "-Xfatal-warnings",
-
-      unsafeEvictionsCheck := unsafeEvictionsCheckTask.value,
-    ) ++ headerLicenseSettings
+      unsafeEvictionsCheck := unsafeEvictionsCheckTask.value
+    ) ++ scalafmtSettings ++ headerLicenseSettings
 
     lazy val commonPublishSettings: Seq[Def.Setting[_]] = Seq(
       licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),
-
       publishAsOSSProject := true,
       performMavenCentralSync := false,
-
       synchronizeWithSonatypeStaging := {},
       releaseToMavenCentral := {},
       autoAPIMappings := true,
-
       developers := List(
         Developer(
           id = "precog",
           name = "Precog Data",
           email = "support@precog.com",
           url = new URL("http://precog.com")
-        )))
+        ))
+    )
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
-
-      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0", "graalvm-ce-java8@21.1.0"),
-
+      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0"),
       githubWorkflowEnv := Map(
         "SBT" -> "./sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
         "ENCRYPTION_PASSWORD" -> s"$${{ secrets.ENCRYPTION_PASSWORD }}",
         "GITHUB_ACTOR" -> "precog-bot",
-        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"),
+        "GITHUB_TOKEN" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
+      ),
 
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "main", "backport/v*"),
-
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
-
       githubWorkflowBuildPreamble +=
         WorkflowStep.Sbt(
           List("transferCommonResources", "exportSecretsForActions"),
           name = Some("Common sbt setup"),
           cond = Some("env.ENCRYPTION_PASSWORD != null")),
-
       githubWorkflowBuild := Seq(WorkflowStep.Sbt(List("ci"))),
-
       githubWorkflowPublishPreamble ++= Seq(
         WorkflowStep.Sbt(
-          List("transferCommonResources", "transferPublishAndTagResources", "exportSecretsForActions"),
+          List(
+            "transferCommonResources",
+            "transferPublishAndTagResources",
+            "exportSecretsForActions"),
           name = Some("Common sbt setup")),
-
-        WorkflowStep.Run(List("./scripts/commonSetup"))),
-
+        WorkflowStep.Run(List("./scripts/commonSetup"))
+      ),
       githubWorkflowPublish := Seq(
         WorkflowStep.Run(
           List(s"./scripts/publishAndTag $${{ github.repository }}"),
           name = Some("Publish artifacts and create tag"))),
-
       githubWorkflowPublishTargetBranches ++= Seq(
         RefPredicate.StartsWith(Ref.Branch("backport/v")),
         RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
-
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",
         "Auto Merge",
@@ -261,32 +274,36 @@ abstract class SbtPrecogBase extends AutoPlugin {
           WorkflowStep.Sbt(
             List("transferCommonResources", "exportSecretsForActions"),
             name = Some("Common sbt setup")),
-
           WorkflowStep.Run(
             List(
               "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
               "chmod +x /tmp/sdmerge"),
-            name = Some("Fetch the latest sdmerge")),
-
+            name = Some("Fetch the latest sdmerge")
+          ),
           WorkflowStep.Run(
             List(
               "git config --global user.email \"bot@precog.com\"",
               "git config --global user.name \"Precog Bot\"",
               "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
             name = Some("Self-merge"),
-            env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}"))),
-        cond = Some("github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
+            env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}")
+          )
+        ),
+        cond = Some(
+          "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
         needs = List("build"),
-        scalas = List(scalaVersion.value)),
-
+        scalas = List(scalaVersion.value)
+      ),
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
-            job.copy(cond = Some("!(github.event_name == 'pull_request' && github.event.pull_request.draft)"))
+            job.copy(cond =
+              Some("!(github.event_name == 'pull_request' && github.event.pull_request.draft)"))
           else
             job
         }
-      })
+      }
+    )
 
     implicit final class ProjectSyntax(val self: Project) {
       def evictToLocal(envVar: String, subproject: String, test: Boolean = false): Project = {
@@ -308,12 +325,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
   override def globalSettings: scala.Seq[Def.Setting[_]] =
     Seq(
       internalPublishAsOSSProject := false,
-
       concurrentRestrictions := {
         val oldValue = (concurrentRestrictions in Global).value
         val maxTasks = 2
         if (githubIsWorkflowBuild.value)
-        // Recreate the default rules with the task limit hard-coded:
+          // Recreate the default rules with the task limit hard-coded:
           Seq(Tags.limitAll(maxTasks), Tags.limit(Tags.ForkedTestGroup, 1))
         else
           oldValue
@@ -325,144 +341,152 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // UnsafeEvictions default settings
       unsafeEvictionsFatal := false,
       unsafeEvictionsConf := Seq.empty,
-      unsafeEvictionsCheck / evictionWarningOptions := EvictionWarningOptions.full
+      unsafeEvictionsCheck / evictionWarningOptions := EvictionWarningOptions
+        .full
         .withWarnEvictionSummary(true)
-        .withInfoAllEvictions(false))
+        .withInfoAllEvictions(false)
+    )
 
   override def buildSettings: scala.Seq[Def.Setting[_]] =
     githubActionsSettings ++
-    addCommandAlias("ci", "; checkHeaders; test") ++
-    Seq(
-      organization := "com.precog",
+      addCommandAlias("ci", "; headerCheckAll; scalafmtCheckAll; test") ++
+      Seq(
+        organization := "com.precog",
+        organizationName := "Precog",
+        organizationHomepage := Some(url("https://precog.com")),
+        managedVersions := ManagedVersions(
+          ((LocalRootProject / baseDirectory).value / VersionsPath).toPath),
+        resolvers := Seq(Resolver.sonatypeRepo("releases")),
+        checkLocalEvictions := {
+          if (foundLocalEvictions.nonEmpty) {
+            sys.error(
+              s"found active local evictions: ${foundLocalEvictions.mkString("[", ", ", "]")}; publication is disabled")
+          }
+        },
+        trickleDbURI := "https://github.com/precog/build-metadata.git",
+        trickleRepositoryName := Project.normalizeModuleID(
+          uri(trickleRepositoryURI.value).getPath.substring(1)),
+        trickleRepositoryURI := scmInfo
+          .value
+          .map(_.browseUrl)
+          .orElse(homepage.value)
+          .getOrElse {
+            sys.error(
+              "Set 'ThisBuild / trickleRepositoryURI' to the github page of this project")
+          }
+          .toString,
+        trickleGitConfig := {
+          import sbttrickle.git.GitConfig
+          val baseConf = sys.env.get("GITHUB_TOKEN") match {
+            case Some(password) => GitConfig(trickleDbURI.value, "_", password)
+            case _ => GitConfig(trickleDbURI.value)
+          }
+          if (githubIsWorkflowBuild.value) baseConf
+          else baseConf.withDontPush
+        },
+        transferPublishAndTagResources / aggregate := false,
+        transferPublishAndTagResources := {
+          val baseDir = (ThisBuild / baseDirectory).value
 
-      organizationName := "Precog",
-      organizationHomepage := Some(url("https://precog.com")),
+          transferScripts("core", baseDir, "publishAndTag", "readVersion", "isRevision")
 
-      managedVersions := ManagedVersions(((LocalRootProject / baseDirectory).value / VersionsPath).toPath),
+          transferToBaseDir("core", baseDir, "signing-secret.pgp.enc")
+        },
+        transferCommonResources / aggregate := false,
+        transferCommonResources := {
+          val baseDir = (ThisBuild / baseDirectory).value
 
-      resolvers := Seq(Resolver.sonatypeRepo("releases")),
+          transferScripts("core", baseDir, "commonSetup", "discordTravisPost")
 
-      checkLocalEvictions := {
-        if (foundLocalEvictions.nonEmpty) {
-          sys.error(s"found active local evictions: ${foundLocalEvictions.mkString("[", ", ", "]")}; publication is disabled")
-        }
-      },
+          transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
+        },
+        secrets := Seq(file("common-secrets.yml.enc")),
+        exportSecretsForActions := {
+          val log = streams.value.log
 
-      trickleDbURI := "https://github.com/precog/build-metadata.git",
-      trickleRepositoryName := Project.normalizeModuleID(uri(trickleRepositoryURI.value).getPath.substring(1)),
-      trickleRepositoryURI := scmInfo.value.map(_.browseUrl).orElse(homepage.value).getOrElse {
-        sys.error("Set 'ThisBuild / trickleRepositoryURI' to the github page of this project")
-      }.toString,
-      trickleGitConfig := {
-        import sbttrickle.git.GitConfig
-        val baseConf = sys.env.get("GITHUB_TOKEN") match {
-          case Some(password) => GitConfig(trickleDbURI.value, "_", password)
-          case _                            => GitConfig(trickleDbURI.value)
-        }
-        if (githubIsWorkflowBuild.value) baseConf
-        else baseConf.withDontPush
-      },
+          if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
+            sys.error("$ENCRYPTION_PASSWORD not set")
+          }
 
-      transferPublishAndTagResources / aggregate := false,
-      transferPublishAndTagResources := {
-        val baseDir = (ThisBuild / baseDirectory).value
+          val yaml = new Yaml
 
-        transferScripts(
-          "core",
-          baseDir,
-          "publishAndTag",
-          "readVersion",
-          "isRevision")
+          secrets.value foreach { file =>
+            if (file.exists()) {
+              val decrypted =
+                s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! log
+              val parsed = yaml
+                .load[Any](decrypted)
+                .asInstanceOf[java.util.Map[String, String]]
+                .asScala
+                .toMap // yolo
+                .filterKeys(_ != "GITHUB_TOKEN")
 
-        transferToBaseDir(
-          "core",
-          baseDir,
-          "signing-secret.pgp.enc")
-      },
-
-      transferCommonResources / aggregate := false,
-      transferCommonResources := {
-        val baseDir = (ThisBuild / baseDirectory).value
-
-        transferScripts(
-          "core",
-          baseDir,
-          "commonSetup",
-          "discordTravisPost")
-
-        transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
-      },
-
-      secrets := Seq(file("common-secrets.yml.enc")),
-
-      exportSecretsForActions := {
-        val log = streams.value.log
-
-        if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
-          sys.error("$ENCRYPTION_PASSWORD not set")
-        }
-
-        val yaml = new Yaml
-
-        secrets.value foreach { file =>
-          if (file.exists()) {
-            val decrypted = s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! log
-            val parsed = yaml.load[Any](decrypted)
-              .asInstanceOf[java.util.Map[String, String]]
-              .asScala
-              .toMap   // yolo
-              .filterKeys(_ != "GITHUB_TOKEN")
-
-            parsed foreach {
-              case (key, value) =>
-                sys.env.get("GITHUB_ENV") match {
-                  case Some(github_env) =>
-                    try {
-                      Files.write(
-                        Paths.get(github_env),
-                        s"$key=$value\n".getBytes(StandardCharsets.UTF_8),
-                        StandardOpenOption.APPEND)
-                    } catch {
-                      case (ex: IOException) =>
-                        log.error(s"Failed setting env var $key: ${ex.getMessage}")
-                        throw ex
-                    }
-                  case None =>
-                    sys.error("GITHUB_ENV env var not set")
-                }
-                println(s"Successfully set env var $key")
+              parsed foreach {
+                case (key, value) =>
+                  sys.env.get("GITHUB_ENV") match {
+                    case Some(github_env) =>
+                      try {
+                        Files.write(
+                          Paths.get(github_env),
+                          s"$key=$value\n".getBytes(StandardCharsets.UTF_8),
+                          StandardOpenOption.APPEND)
+                      } catch {
+                        case (ex: IOException) =>
+                          log.error(s"Failed setting env var $key: ${ex.getMessage}")
+                          throw ex
+                      }
+                    case None =>
+                      sys.error("GITHUB_ENV env var not set")
+                  }
+                  println(s"Successfully set env var $key")
+              }
             }
           }
+        },
+        decryptSecret / aggregate := false,
+        decryptSecret := crypt("-d", _.stripSuffix(".enc")).evaluated,
+        encryptSecret / aggregate := false,
+        encryptSecret := crypt("-e", _ + ".enc").evaluated
+      )
+
+  private def resourceContents(resourceName: String): String =
+    Option(getClass.getResource(resourceName)) match {
+      case None =>
+        sys.error(s"Resource $resourceName not found")
+      case Some(res) =>
+        sbt.io.Using.urlInputStream(res) { stream =>
+          SIO.readStream(stream, StandardCharsets.UTF_8)
         }
-      },
-
-      decryptSecret / aggregate := false,
-      decryptSecret := crypt("-d", _.stripSuffix(".enc")).evaluated,
-
-      encryptSecret / aggregate := false,
-      encryptSecret := crypt("-e", _ + ".enc").evaluated)
-
-  def crypt(operation: String, destFile: String => String): Initialize[InputTask[Unit]] = Def.inputTask {
-    val log = streams.value.log
-
-    if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
-      log.error("ENCRYPTION_PASSWORD not set")
-      sys.error("$ENCRYPTION_PASSWORD not set")
     }
 
-    val file = fileParser(baseDirectory.value).parsed
-    val output = destFile(file.getPath)
-    val exitCode =
-      runWithLogger(s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -out $output $operation""", log)
-    if (exitCode != 0) {
-      log.error(s"openssl exited with status $exitCode")
-      sys.error(s"openssl exited with status $exitCode")
-    } else {
-      file.delete()
-    }
-  }
+  def crypt(operation: String, destFile: String => String): Initialize[InputTask[Unit]] =
+    Def.inputTask {
+      val log = streams.value.log
 
-  private def runWithLogger(command: String, log: Logger, merge: Boolean = false, workingDir: Option[File] = None): Int = {
+      if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
+        log.error("ENCRYPTION_PASSWORD not set")
+        sys.error("$ENCRYPTION_PASSWORD not set")
+      }
+
+      val file = fileParser(baseDirectory.value).parsed
+      val output = destFile(file.getPath)
+      val exitCode =
+        runWithLogger(
+          s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -out $output $operation""",
+          log)
+      if (exitCode != 0) {
+        log.error(s"openssl exited with status $exitCode")
+        sys.error(s"openssl exited with status $exitCode")
+      } else {
+        file.delete()
+      }
+    }
+
+  private def runWithLogger(
+      command: String,
+      log: Logger,
+      merge: Boolean = false,
+      workingDir: Option[File] = None): Int = {
     val plogger = ProcessLogger(log.info(_), if (merge) log.info(_) else log.error(_))
     Process(command, workingDir) ! plogger
   }
@@ -473,14 +497,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
     val isFatal = unsafeEvictionsFatal.value
     val conf = unsafeEvictionsConf.value
     val ewo = (evictionWarningOptions in unsafeEvictionsCheck).value
-    val report = (updateFull tag(Tags.Update, Tags.Network)).value
+    val report = (updateFull tag (Tags.Update, Tags.Network)).value
     val log = streams.value.log
     precog.UnsafeEvictions.check(currentProject, module, isFatal, conf, ewo, report, log)
   }
 
   private def isWindows(): Boolean = System.getProperty("os.name").startsWith("Windows")
 
-  private def transfer(src: String, dst: File, permissions: Set[PosixFilePermission] = Set()) = {
+  private def transfer(
+      src: String,
+      dst: File,
+      permissions: Set[PosixFilePermission] = Set()) = {
     val src2 = getClass.getClassLoader.getResourceAsStream(src)
     sbt.io.IO.transfer(src2, dst)
 
@@ -495,78 +522,83 @@ abstract class SbtPrecogBase extends AutoPlugin {
     srcs.foreach(src => transfer(prefix + "/" + src, baseDir / src))
 
   protected def transferScripts(prefix: String, baseDir: File, srcs: String*): Unit =
-    srcs.foreach(src => transfer(prefix + "/" + src, baseDir / "scripts" / src, Set(OWNER_EXECUTE)))
+    srcs.foreach(src =>
+      transfer(prefix + "/" + src, baseDir / "scripts" / src, Set(OWNER_EXECUTE)))
 
   override def projectSettings: scala.Seq[Def.Setting[_]] =
     AutomateHeaderPlugin.projectSettings ++
-    commonBuildSettings ++
-    commonPublishSettings ++
-    Seq(
-      Global / internalPublishAsOSSProject := (Global / internalPublishAsOSSProject).value || publishAsOSSProject.value,
+      commonBuildSettings ++
+      commonPublishSettings ++
+      Seq(
+        Global / internalPublishAsOSSProject := (Global / internalPublishAsOSSProject).value || publishAsOSSProject.value,
+        version := {
+          import scala.sys.process._
 
-      version := {
-        import scala.sys.process._
+          val currentVersion = version.value
+          if (!githubIsWorkflowBuild.value)
+            currentVersion + "-" + "git rev-parse HEAD".!!.substring(0, 7)
+          else
+            currentVersion
+        },
+        unsafeEvictionsFatal := githubIsWorkflowBuild.value,
+        unsafeEvictionsConf += (UnsafeEvictions.IsOrg(
+          "com.precog") -> VersionNumber.SecondSegment),
+        update := {
+          val _ = unsafeEvictionsCheck.value
+          update.value
+        },
 
-        val currentVersion = version.value
-        if (!githubIsWorkflowBuild.value)
-          currentVersion + "-" + "git rev-parse HEAD".!!.substring(0, 7)
-        else
-          currentVersion
-      },
+        // TODO: self-check, to run on PRs
+        // TODO: cluster datasources/destinations
+        trickleGitUpdateMessage := s"${trickleRepositoryName.value} ${version.value}",
+        trickleUpdateDependencies := {
+          val log = streams.value.log
+          val repository = trickleRepositoryName.value
+          val outdatedDependencies = trickleOutdatedDependencies.value
+          managedVersions.?.value map { versions =>
+            updateDependencies(repository, outdatedDependencies, versions, log)
+          } getOrElse sys.error(
+            s"No version management file found; please create $VersionsPath")
+        },
+        trickleCreatePullRequest := { repository =>
+          assert(
+            url(repository.url).getHost == "github.com",
+            s"Unexpected host on ${repository.url}")
 
-      unsafeEvictionsFatal := githubIsWorkflowBuild.value,
-      unsafeEvictionsConf += (UnsafeEvictions.IsOrg("com.precog") -> VersionNumber.SecondSegment),
-      update := {
-        val _ = unsafeEvictionsCheck.value
-        update.value
-      },
+          val previous = trickleCreatePullRequest.value
+          val author = trickleRepositoryName.value
+          val log = sLog.value
+          val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
 
-      // TODO: self-check, to run on PRs
-      // TODO: cluster datasources/destinations
+          implicit val IOContextShift: ContextShift[IO] = contextShift(global)
 
-      trickleGitUpdateMessage := s"${trickleRepositoryName.value} ${version.value}",
+          val program = AsyncHttpClient.resource[IO]().use { client =>
+            val github: Github[IO] = GithubInterpreter[IO](client, Some(token))
+            implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
+            implicit val labels: Labels[IO] = github.labels
+            implicit val references: References[IO] = github.references
+            implicit val clock: Clock[IO] = Clock.create
 
-      trickleUpdateDependencies := {
-        val log = streams.value.log
-        val repository = trickleRepositoryName.value
-        val outdatedDependencies = trickleOutdatedDependencies.value
-        managedVersions.?.value map { versions =>
-          updateDependencies(repository, outdatedDependencies, versions, log)
-        } getOrElse sys.error(s"No version management file found; please create $VersionsPath")
-      },
-
-      trickleCreatePullRequest := { repository =>
-        assert(url(repository.url).getHost == "github.com", s"Unexpected host on ${repository.url}")
-
-        val previous = trickleCreatePullRequest.value
-        val author = trickleRepositoryName.value
-        val log = sLog.value
-        val token = sys.env.getOrElse("GITHUB_TOKEN", sys.error("GITHUB_TOKEN not found"))
-
-        implicit val IOContextShift: ContextShift[IO] = contextShift(global)
-
-        val program = AsyncHttpClient.resource[IO]().use { client =>
-          val github: Github[IO] = GithubInterpreter[IO](client, Some(token))
-          implicit val draftPullRequests: DraftPullRequests[IO] = github.draftPullRequests
-          implicit val labels: Labels[IO] = github.labels
-          implicit val references: References[IO] = github.references
-          implicit val clock: Clock[IO] = Clock.create
-
-          implicit val runner: Runner[IO] = SyncRunner[IO](log)
-          val runnerConfig = Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
-          val (owner, repoSlug) = repository.ownerAndRepository
+            implicit val runner: Runner[IO] = SyncRunner[IO](log)
+            val runnerConfig =
+              Runner.DefaultConfig.hide(token).withEnv(sys.env.filterKeys(_ == "SBT").toSeq: _*)
+            val (owner, repoSlug) = repository
+              .ownerAndRepository
               .getOrElse(sys.error(f"invalid repository url ${repository.url}%s"))
-          val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
+            val cloningURL = f"https://_:$token%s@github.com/$owner%s/$repoSlug%s"
 
-          previous(repository)
-          new AutoBump(author, owner, repoSlug, cloningURL, log)
+            previous(repository)
+            new AutoBump(author, owner, repoSlug, cloningURL, log)
               .createPullRequest[IO](runnerConfig)
+          }
+
+          program.unsafeRunSync()
         }
+      )
 
-        program.unsafeRunSync()
-      })
-
-  /** Which repositories that will always bump dependencies as a revision PR */
+  /**
+   * Which repositories that will always bump dependencies as a revision PR
+   */
   val RevisionRepositories: Regex =
     raw"""^precog-(?:quasar-(?:datasource|destination|plugin)-.+|sdbe|onprem|electron)$$""".r
 
@@ -588,18 +620,21 @@ abstract class SbtPrecogBase extends AutoPlugin {
     var hasErrors = false
 
     outdatedDependencies map {
-      case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) => (newRevision, dependencyRepository)
+      case ModuleUpdateData(_, _, newRevision, dependencyRepository, _) =>
+        (newRevision, dependencyRepository)
     } foreach {
       case (newRevision, dependencyRepository) =>
         versions.get(dependencyRepository) match {
           case Some(currentRevision) =>
             val currentVersion = VersionNumber(currentRevision)
             val newVersion = VersionNumber(newRevision)
-            val testRevision = VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
+            val testRevision =
+              VersionNumber.SecondSegment.isCompatible(currentVersion, newVersion)
             val testBreaking = !VersionNumber.SemVer.isCompatible(currentVersion, newVersion)
             isRevision &&= testRevision
             isBreaking ||= testBreaking
-            log.info(s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> " +
+            log.info(
+              s"Updated ${getChange(testRevision, testBreaking)} $dependencyRepository $currentVersion -> " +
                 s"$newRevision")
 
           case None =>
@@ -616,7 +651,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     val change = repository match {
       case RevisionRepositories() => Some("revision")
-      case OnlyRevisionRepositories() => Some(getChange(isRevision, isBreaking)).filter(_ == "revision")
+      case OnlyRevisionRepositories() =>
+        Some(getChange(isRevision, isBreaking)).filter(_ == "revision")
       case _ => Some(getChange(isRevision, isBreaking))
     }
 
@@ -625,4 +661,3 @@ abstract class SbtPrecogBase extends AutoPlugin {
     if (hasErrors) sys.error("Unmanaged dependencies found!")
   }
 }
-
