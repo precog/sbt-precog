@@ -12,7 +12,6 @@ tags
 /scripts/bumpDependentProject
 /scripts/checkAndAutoMerge
 /scripts/commonSetup
-/credentials.bintray.enc
 /scripts/isRevision
 /scripts/listLabels
 /scripts/closePR
