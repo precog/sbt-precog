@@ -7,11 +7,11 @@ addSbtPlugin("com.dcsobral"      % "sbt-trickle"        % "0.3-8f135be")
 val specs2Version = "4.12.7"
 
 libraryDependencies ++= Seq(
-  "org.typelevel"       %% "cats-effect"              % "2.1.4",
-  "co.fs2"              %% "fs2-core"                 % "2.4.2",
+  "org.typelevel"       %% "cats-effect"              % "2.5.1",
+  "co.fs2"              %% "fs2-core"                 % "2.5.9",
   "com.47deg"           %% "github4s"                 % "0.25.0",
-  "org.http4s"          %% "http4s-async-http-client" % "0.21.6",
-  "org.sangria-graphql" %% "sangria"                  % "2.0.0",
+  "org.http4s"          %% "http4s-async-http-client" % "0.21.27",
+  "org.sangria-graphql" %% "sangria"                  % "2.1.3",
   "org.specs2"          %% "specs2-core"              % specs2Version % Test,
   "org.specs2"          %% "specs2-matcher-extra"     % specs2Version % Test,
   "org.specs2"          %% "specs2-scalacheck"        % specs2Version % Test)
