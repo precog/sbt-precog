@@ -27,9 +27,6 @@ trait SbtPrecogKeys {
   lazy val managedVersions =
     settingKey[ManagedVersions]("The trickle-managed versions repository")
 
-  lazy val exportSecretsForActions = taskKey[Unit](
-    "Uses the GitHub Actions echo syntax and the openssl command to decrypt and export all configured secrets")
-
   lazy val decryptSecret = inputKey[Unit](
     "Delegates to openssl to decrypt a given file that was encrypted using $ENCRYPTION_PASSWORD. The name should correspond to the *decrypted* file, while the encrypted file is suffixed with `.enc`. Paths are relative to the base of the project")
 
@@ -49,16 +46,11 @@ trait SbtPrecogKeys {
     taskKey[Unit]("Transfers common resources not used in publication")
 
   lazy val scalacStrictMode =
-    settingKey[Boolean]("Include stricter warnings and WartRemover settings")
-
-  lazy val checkHeaders = taskKey[Unit]("Fail the build if createHeaders is not up-to-date")
+    settingKey[Boolean]("Include stricter warnings")
 
   lazy val publishAsOSSProject = settingKey[Boolean](
-    "Determines if project should be released publicly both to bintray and maven or only to a private bintray repository")
+    "Determines if project should be released publicly both to github and maven or only to github")
 
-  lazy val synchronizeWithSonatypeStaging =
-    taskKey[Unit]("Synchronize artifacts published on bintray sonatype staging repository")
-  lazy val releaseToMavenCentral = taskKey[Unit]("Close the sonatype staging repository")
   lazy val performMavenCentralSync = settingKey[Boolean](
     "If true, then project will be sync'd from maven-public to Maven Central")
 

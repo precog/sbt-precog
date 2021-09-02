@@ -17,11 +17,8 @@
 package precog
 
 import java.io.File
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.Paths
-import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
 import scala.collection.JavaConverters._
@@ -39,7 +36,6 @@ import cats.effect.IO.contextShift
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import org.http4s.client.asynchttpclient.AsyncHttpClient
-import org.yaml.snakeyaml.Yaml
 import precog.algebras.DraftPullRequests
 import precog.algebras.Github
 import precog.algebras.Labels
@@ -159,10 +155,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
-      licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
-      checkHeaders := {
-        if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
-      }
+      licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0")))
     )
 
     lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
@@ -216,8 +209,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
       licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       publishAsOSSProject := true,
       performMavenCentralSync := false,
-      synchronizeWithSonatypeStaging := {},
-      releaseToMavenCentral := {},
       autoAPIMappings := true,
       developers := List(
         Developer(
@@ -244,16 +235,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
       githubWorkflowBuildPreamble +=
         WorkflowStep.Sbt(
-          List("transferCommonResources", "exportSecretsForActions"),
+          List("transferCommonResources"),
           name = Some("Common sbt setup"),
           cond = Some("env.ENCRYPTION_PASSWORD != null")),
       githubWorkflowBuild := Seq(WorkflowStep.Sbt(List("ci"))),
       githubWorkflowPublishPreamble ++= Seq(
         WorkflowStep.Sbt(
-          List(
-            "transferCommonResources",
-            "transferPublishAndTagResources",
-            "exportSecretsForActions"),
+          List("transferCommonResources", "transferPublishAndTagResources"),
           name = Some("Common sbt setup")),
         WorkflowStep.Run(List("./scripts/commonSetup"))
       ),
@@ -271,9 +259,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(
           WorkflowStep.Checkout,
           WorkflowStep.SetupScala,
-          WorkflowStep.Sbt(
-            List("transferCommonResources", "exportSecretsForActions"),
-            name = Some("Common sbt setup")),
+          WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
           WorkflowStep.Run(
             List(
               "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
@@ -396,53 +382,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
         transferCommonResources := {
           val baseDir = (ThisBuild / baseDirectory).value
 
-          transferScripts("core", baseDir, "commonSetup", "discordTravisPost")
+          transferScripts("core", baseDir, "commonSetup")
 
           transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
         },
         secrets := Seq(file("common-secrets.yml.enc")),
-        exportSecretsForActions := {
-          val log = streams.value.log
-
-          if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
-            sys.error("$ENCRYPTION_PASSWORD not set")
-          }
-
-          val yaml = new Yaml
-
-          secrets.value foreach { file =>
-            if (file.exists()) {
-              val decrypted =
-                s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! log
-              val parsed = yaml
-                .load[Any](decrypted)
-                .asInstanceOf[java.util.Map[String, String]]
-                .asScala
-                .toMap // yolo
-                .filterKeys(_ != "GITHUB_TOKEN")
-
-              parsed foreach {
-                case (key, value) =>
-                  sys.env.get("GITHUB_ENV") match {
-                    case Some(github_env) =>
-                      try {
-                        Files.write(
-                          Paths.get(github_env),
-                          s"$key=$value\n".getBytes(StandardCharsets.UTF_8),
-                          StandardOpenOption.APPEND)
-                      } catch {
-                        case (ex: IOException) =>
-                          log.error(s"Failed setting env var $key: ${ex.getMessage}")
-                          throw ex
-                      }
-                    case None =>
-                      sys.error("GITHUB_ENV env var not set")
-                  }
-                  println(s"Successfully set env var $key")
-              }
-            }
-          }
-        },
         decryptSecret / aggregate := false,
         decryptSecret := crypt("-d", _.stripSuffix(".enc")).evaluated,
         encryptSecret / aggregate := false,

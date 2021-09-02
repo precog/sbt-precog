@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
         with:
           java-version: ${{ matrix.java }}
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Common sbt setup
         if: env.ENCRYPTION_PASSWORD != null
-        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources
 
       - name: Check that workflows are up to date
         run: $SBT ++${{ matrix.scala }} githubWorkflowCheck
@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
         with:
           java-version: ${{ matrix.java }}
 
@@ -116,7 +116,7 @@ jobs:
           rm targets.tar
 
       - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources transferPublishAndTagResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources transferPublishAndTagResources
 
       - run: ./scripts/commonSetup
 
@@ -138,12 +138,12 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
         with:
           java-version: ${{ matrix.java }}
 
       - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources
 
       - name: Fetch the latest sdmerge
         run: |
