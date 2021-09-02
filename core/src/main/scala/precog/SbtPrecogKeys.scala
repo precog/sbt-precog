@@ -46,10 +46,10 @@ trait SbtPrecogKeys {
     taskKey[Unit]("Transfers common resources not used in publication")
 
   lazy val scalacStrictMode =
-    settingKey[Boolean]("Include stricter warnings and WartRemover settings")
+    settingKey[Boolean]("Include stricter warnings")
 
   lazy val publishAsOSSProject = settingKey[Boolean](
-    "Determines if project should be released publicly both to bintray and maven or only to a private bintray repository")
+    "Determines if project should be released publicly both to github and maven or only to github")
 
   lazy val synchronizeWithSonatypeStaging =
     taskKey[Unit]("Synchronize artifacts published on bintray sonatype staging repository")

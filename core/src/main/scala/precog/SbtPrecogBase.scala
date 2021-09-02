@@ -17,11 +17,8 @@
 package precog
 
 import java.io.File
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.nio.file.Paths
-import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.PosixFilePermission
 import java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
 import scala.collection.JavaConverters._
@@ -39,7 +36,6 @@ import cats.effect.IO.contextShift
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
 import org.http4s.client.asynchttpclient.AsyncHttpClient
-import org.yaml.snakeyaml.Yaml
 import precog.algebras.DraftPullRequests
 import precog.algebras.Github
 import precog.algebras.Labels
