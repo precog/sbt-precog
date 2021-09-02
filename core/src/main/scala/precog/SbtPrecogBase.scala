@@ -396,7 +396,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         transferCommonResources := {
           val baseDir = (ThisBuild / baseDirectory).value
 
-          transferScripts("core", baseDir, "commonSetup", "discordTravisPost")
+          transferScripts("core", baseDir, "commonSetup")
 
           transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
         },
