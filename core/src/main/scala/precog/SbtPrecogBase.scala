@@ -244,16 +244,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
       githubWorkflowBuildPreamble +=
         WorkflowStep.Sbt(
-          List("transferCommonResources", "exportSecretsForActions"),
+          List("transferCommonResources"),
           name = Some("Common sbt setup"),
           cond = Some("env.ENCRYPTION_PASSWORD != null")),
       githubWorkflowBuild := Seq(WorkflowStep.Sbt(List("ci"))),
       githubWorkflowPublishPreamble ++= Seq(
         WorkflowStep.Sbt(
-          List(
-            "transferCommonResources",
-            "transferPublishAndTagResources",
-            "exportSecretsForActions"),
+          List("transferCommonResources", "transferPublishAndTagResources"),
           name = Some("Common sbt setup")),
         WorkflowStep.Run(List("./scripts/commonSetup"))
       ),
@@ -271,9 +268,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(
           WorkflowStep.Checkout,
           WorkflowStep.SetupScala,
-          WorkflowStep.Sbt(
-            List("transferCommonResources", "exportSecretsForActions"),
-            name = Some("Common sbt setup")),
+          WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
           WorkflowStep.Run(
             List(
               "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
@@ -401,48 +396,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
           transferToBaseDir("core", baseDir, "common-secrets.yml.enc")
         },
         secrets := Seq(file("common-secrets.yml.enc")),
-        exportSecretsForActions := {
-          val log = streams.value.log
-
-          if (!sys.env.contains("ENCRYPTION_PASSWORD")) {
-            sys.error("$ENCRYPTION_PASSWORD not set")
-          }
-
-          val yaml = new Yaml
-
-          secrets.value foreach { file =>
-            if (file.exists()) {
-              val decrypted =
-                s"""openssl aes-256-cbc -pass env:ENCRYPTION_PASSWORD -md sha1 -in $file -d""" !! log
-              val parsed = yaml
-                .load[Any](decrypted)
-                .asInstanceOf[java.util.Map[String, String]]
-                .asScala
-                .toMap // yolo
-                .filterKeys(_ != "GITHUB_TOKEN")
-
-              parsed foreach {
-                case (key, value) =>
-                  sys.env.get("GITHUB_ENV") match {
-                    case Some(github_env) =>
-                      try {
-                        Files.write(
-                          Paths.get(github_env),
-                          s"$key=$value\n".getBytes(StandardCharsets.UTF_8),
-                          StandardOpenOption.APPEND)
-                      } catch {
-                        case (ex: IOException) =>
-                          log.error(s"Failed setting env var $key: ${ex.getMessage}")
-                          throw ex
-                      }
-                    case None =>
-                      sys.error("GITHUB_ENV env var not set")
-                  }
-                  println(s"Successfully set env var $key")
-              }
-            }
-          }
-        },
         decryptSecret / aggregate := false,
         decryptSecret := crypt("-d", _.stripSuffix(".enc")).evaluated,
         encryptSecret / aggregate := false,

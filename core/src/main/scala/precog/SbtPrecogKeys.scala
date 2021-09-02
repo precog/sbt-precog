@@ -27,9 +27,6 @@ trait SbtPrecogKeys {
   lazy val managedVersions =
     settingKey[ManagedVersions]("The trickle-managed versions repository")
 
-  lazy val exportSecretsForActions = taskKey[Unit](
-    "Uses the GitHub Actions echo syntax and the openssl command to decrypt and export all configured secrets")
-
   lazy val decryptSecret = inputKey[Unit](
     "Delegates to openssl to decrypt a given file that was encrypted using $ENCRYPTION_PASSWORD. The name should correspond to the *decrypted* file, while the encrypted file is suffixed with `.enc`. Paths are relative to the base of the project")
 
