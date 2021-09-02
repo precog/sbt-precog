@@ -48,8 +48,6 @@ trait SbtPrecogKeys {
   lazy val scalacStrictMode =
     settingKey[Boolean]("Include stricter warnings and WartRemover settings")
 
-  lazy val checkHeaders = taskKey[Unit]("Fail the build if createHeaders is not up-to-date")
-
   lazy val publishAsOSSProject = settingKey[Boolean](
     "Determines if project should be released publicly both to bintray and maven or only to a private bintray repository")
 

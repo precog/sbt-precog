@@ -159,10 +159,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     val headerLicenseSettings: Seq[Def.Setting[_]] = Seq(
       headerLicense := Some(HeaderLicense.ALv2("2021", "Precog Data")),
-      licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0"))),
-      checkHeaders := {
-        if ((headerCreate in Compile).value.nonEmpty) sys.error("headers not all present")
-      }
+      licenses += (("Apache 2", url("http://www.apache.org/licenses/LICENSE-2.0")))
     )
 
     lazy val commonBuildSettings: Seq[Def.Setting[_]] = Seq(
