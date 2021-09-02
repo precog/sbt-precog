@@ -46,9 +46,8 @@ object SbtPrecog extends SbtPrecogBase {
       Seq(
         githubOwner := "precog",
         githubTokenSource := TokenSource.Environment("GITHUB_TOKEN") || githubTokenSource.value,
-        resolvers += Resolver.githubPackages("precog"),
-        resolvers += Resolver.githubPackages("slamdata")
-      ) // TODO remove
+        resolvers += Resolver.githubPackages("precog")
+      )
 
   protected val autoImporter = autoImport
 }
