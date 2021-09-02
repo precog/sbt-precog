@@ -56,7 +56,7 @@ jobs:
 
       - name: Common sbt setup
         if: env.ENCRYPTION_PASSWORD != null
-        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources
 
       - name: Check that workflows are up to date
         run: $SBT ++${{ matrix.scala }} githubWorkflowCheck
@@ -116,7 +116,7 @@ jobs:
           rm targets.tar
 
       - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources transferPublishAndTagResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources transferPublishAndTagResources
 
       - run: ./scripts/commonSetup
 
@@ -143,7 +143,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources exportSecretsForActions
+        run: $SBT ++${{ matrix.scala }} transferCommonResources
 
       - name: Fetch the latest sdmerge
         run: |
