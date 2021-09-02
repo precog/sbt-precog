@@ -209,7 +209,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
       licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),
       publishAsOSSProject := true,
       performMavenCentralSync := false,
-      synchronizeWithSonatypeStaging := {},
       releaseToMavenCentral := {},
       autoAPIMappings := true,
       developers := List(
