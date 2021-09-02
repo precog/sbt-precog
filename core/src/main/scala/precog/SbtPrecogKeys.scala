@@ -51,7 +51,6 @@ trait SbtPrecogKeys {
   lazy val publishAsOSSProject = settingKey[Boolean](
     "Determines if project should be released publicly both to github and maven or only to github")
 
-  lazy val releaseToMavenCentral = taskKey[Unit]("Close the sonatype staging repository")
   lazy val performMavenCentralSync = settingKey[Boolean](
     "If true, then project will be sync'd from maven-public to Maven Central")
 
