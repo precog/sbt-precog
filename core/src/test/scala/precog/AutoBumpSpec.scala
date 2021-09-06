@@ -32,7 +32,6 @@ import github4s.GHResponse
 import github4s.domain._
 import org.specs2.ScalaCheck
 import org.specs2.execute.ResultImplicits
-import org.specs2.main.CommandLine
 import org.specs2.matcher.MatcherMacros
 import org.specs2.mutable.Specification
 import precog.AutoBump.ChangeLabel
@@ -46,7 +45,7 @@ import precog.algebras.Runner.RunnerConfig
 import precog.algebras._
 import precog.domain._
 
-class AutoBumpSpec(params: CommandLine)
+class AutoBumpSpec
     extends Specification
     with ScalaCheck
     with ResultImplicits

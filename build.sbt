@@ -14,9 +14,7 @@ lazy val root = project
   .settings(noPublishSettings)
 
 lazy val core = project.in(file("core"))
-  .settings(
-    name := "sbt-precog-core",
-    scalacStrictMode := false)
+  .settings(name := "sbt-precog-core")
 
 lazy val artifact = project.in(file("artifact"))
   .dependsOn(core)

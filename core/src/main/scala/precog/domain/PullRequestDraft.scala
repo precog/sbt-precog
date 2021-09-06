@@ -43,7 +43,7 @@ final case class PullRequestDraft(
 object PullRequestDraft {
   implicit class ToPullRequestSyntax(pr: PullRequestDraft) {
     def toPullRequest: PullRequest = PullRequest(
-      id = pr.id,
+      id = pr.id.toLong,
       number = pr.number,
       state = pr.state,
       title = pr.title,

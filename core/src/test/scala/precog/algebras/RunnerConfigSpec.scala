@@ -16,11 +16,10 @@
 
 package precog.algebras
 
-import org.specs2.main.CommandLine
 import precog.algebras.Runner.RunnerConfig
 import sbt.file
 
-class RunnerConfigSpec(params: CommandLine) extends org.specs2.mutable.Specification {
+class RunnerConfigSpec extends org.specs2.mutable.Specification {
   "RunnerConfig fluent builders" should {
     "be equivalent to case class build" in {
       val config = Runner.DefaultConfig

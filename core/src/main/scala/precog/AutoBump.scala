@@ -410,7 +410,7 @@ class AutoBump(
         log.info(f"Closed $owner%s/$repoSlug%s#${pullRequest.number}%d ($issue%s)"))
       _ <- deleteBranch(pullRequest).void recover {
         case e: GHException =>
-          if (e.statusCode == 204) Sync[F].unit
+          if (e.statusCode == 204) ()
           else log.warn(s"Error deleting branch: $e")
       }
       _ <- Sync[F].delay(

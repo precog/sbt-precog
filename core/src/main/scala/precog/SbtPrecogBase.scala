@@ -35,6 +35,7 @@ import cats.effect.IO
 import cats.effect.IO.contextShift
 import de.heikoseeberger.sbtheader.AutomateHeaderPlugin
 import de.heikoseeberger.sbtheader.HeaderPlugin.autoImport._
+import io.github.davidgregory084.TpolecatPlugin
 import org.http4s.client.asynchttpclient.AsyncHttpClient
 import precog.algebras.DraftPullRequests
 import precog.algebras.Github
@@ -71,6 +72,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     plugins.JvmPlugin &&
       GitHubActionsPlugin &&
       SbtGpg &&
+      TpolecatPlugin &&
       TricklePlugin
 
   override def trigger = allRequirements
@@ -85,62 +87,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     def exclusiveTasks(tasks: Scoped*) =
       tasks.flatMap(inTask(_)(tags := Seq((ExclusiveTest, 1))))
-
-    def scalacOptions_2_10(strict: Boolean): Seq[String] = {
-      val global = Seq(
-        "-encoding",
-        "UTF-8",
-        "-deprecation",
-        "-language:existentials",
-        "-language:higherKinds",
-        "-language:implicitConversions",
-        "-feature",
-        "-Xlint")
-
-      if (strict) {
-        global ++ Seq(
-          "-unchecked",
-          "-Xfuture",
-          "-Yno-adapted-args",
-          "-Yno-imports",
-          "-Ywarn-dead-code",
-          "-Ywarn-numeric-widen",
-          "-Ywarn-value-discard")
-      } else {
-        global
-      }
-    }
-
-    def scalacOptions_2_11(strict: Boolean): Seq[String] = {
-      val global = Seq("-Ypartial-unification", "-Ywarn-unused-import")
-
-      if (strict)
-        global :+ "-Ydelambdafy:method"
-      else
-        global
-    }
-
-    def scalacOptions_2_12(strict: Boolean): Seq[String] = Seq("-target:jvm-1.8")
-
-    def scalacOptions_2_13(strict: Boolean): Seq[String] = {
-      val numCPUs = java.lang.Runtime.getRuntime.availableProcessors()
-      Seq(
-        s"-Ybackend-parallelism",
-        numCPUs.toString,
-        "-Wunused:imports",
-        "-Wdead-code",
-        "-Wnumeric-widen",
-        "-Wvalue-discard")
-    }
-
-    val scalacOptionsRemoved_2_13: Seq[String] =
-      Seq(
-        "-Yno-adapted-args",
-        "-Ywarn-unused-import",
-        "-Ywarn-value-discard",
-        "-Ywarn-numeric-widen",
-        "-Ywarn-dead-code",
-        "-Xfuture")
 
     val scalafmtSettings: Seq[Def.Setting[_]] = Seq(
       SettingKey[Unit]("scalafmtGenerateConfig") := {
@@ -167,40 +113,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       // default to true
       scalacStrictMode := true,
-      scalacOptions ++= {
-        val strict = scalacStrictMode.value
-
-        CrossVersion.partialVersion(scalaVersion.value) match {
-          case Some((2, 13)) =>
-            val mainline = scalacOptions_2_10(strict) ++
-              scalacOptions_2_11(strict) ++
-              scalacOptions_2_12(strict) ++
-              scalacOptions_2_13(strict)
-
-            mainline.filterNot(scalacOptionsRemoved_2_13.contains)
-
-          case Some((2, 12)) =>
-            scalacOptions_2_10(strict) ++ scalacOptions_2_11(strict) ++ scalacOptions_2_12(
-              strict)
-
-          case Some((2, 11)) => scalacOptions_2_10(strict) ++ scalacOptions_2_11(strict)
-
-          case _ => scalacOptions_2_10(strict)
-        }
-      },
       scalacOptions --= {
-        CrossVersion.partialVersion(scalaVersion.value) match {
-          case Some((2, n)) if n >= 13 => Some("-Ypartial-unification")
-          case _ => None
-        }
+        val strict = scalacStrictMode.value
+        if (strict) Seq() else Seq("-Xfatal-warnings")
       },
-      scalacOptions ++= {
-        if (githubIsWorkflowBuild.value && scalacStrictMode.value)
-          Seq("-Xfatal-warnings")
-        else
-          Seq()
-      },
-      scalacOptions in (Test, console) --= Seq("-Yno-imports", "-Ywarn-unused-import"),
       scalacOptions in (Compile, doc) -= "-Xfatal-warnings",
       unsafeEvictionsCheck := unsafeEvictionsCheckTask.value
     ) ++ scalafmtSettings ++ headerLicenseSettings
@@ -423,6 +339,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         sys.error(s"openssl exited with status $exitCode")
       } else {
         file.delete()
+        ()
       }
     }
 
