@@ -67,7 +67,7 @@ case class TestEnv(
 
   def withLabel(owner: String, repo: String, id: Int, name: String): TestEnv = {
     val labelList = labels.getOrElse((owner, repo, id), Nil)
-    val label = Label(Some(id), name, "", "", None)
+    val label = Label(Some(id.toLong), name, "", "", None)
     copy(labels = labels.updated((owner, repo, id), label :: labelList))
   }
 }
