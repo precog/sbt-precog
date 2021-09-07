@@ -113,6 +113,18 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
       // default to true
       scalacStrictMode := true,
+      // This option shows the category of the warning which makes it easy to silence a warning with @nowarn
+      // E.g. this warning
+      // [unused-params @ tectonic.json.SkipBenchmarks.projectBarKeyFromUgh10k.bh] parameter value bh in method projectBarKeyFromUgh10k is never used
+      // can be silenced with
+      // @nowarn("cat=unused-params")
+      scalacOptions ++= {
+        CrossVersion.partialVersion(scalaVersion.value) match {
+          case Some((2, 13)) => Seq("-Wconf:any:warning-verbose")
+          case Some((2, 12)) => Seq()
+          case v => sys.error(s"Unsupported scala version: $v")
+        }
+      },
       scalacOptions --= {
         val strict = scalacStrictMode.value
         if (strict) Seq() else Seq("-Xfatal-warnings")
