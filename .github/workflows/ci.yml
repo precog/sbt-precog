@@ -15,7 +15,7 @@ on:
     branches: [master, main, backport/v*]
 
 env:
-  SBT: ./sbt
+  SBT: sbt
   REPO_SLUG: ${{ github.repository }}
   ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}
   GITHUB_ACTOR: precog-bot
