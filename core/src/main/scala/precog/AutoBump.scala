@@ -140,7 +140,7 @@ object AutoBump {
 
   val AutoBumpLabel = ":robot:"
   val PullRequestFilters: List[PRFilter] =
-    List(PRFilterOpen, PRFilterSortCreated, PRFilterOrderAsc, PRFilterBase("master"))
+    List(PRFilterOpen, PRFilterSortCreated, PRFilterOrderAsc)
   val LinkRelation: Regex = """<(.*?)>; rel="(\w+)"""".r
   val PerPage = 100
 
@@ -256,11 +256,17 @@ class AutoBump(
   def getOldestAutoBumpPullRequest[F[_]: Sync: DraftPullRequests: Labels]
       : F[Option[PullRequestDraft]] = {
     getPullRequests
-      .evalFilter(pullRequest =>
-        getLabels(pullRequest.number)
-          .compile
-          .toList
-          .map(labels => isAutoBump(pullRequest, labels)))
+      .evalFilter { pullRequest =>
+        val isMain =
+          pullRequest.base.map(p => p.ref === "main" || p.ref === "master").getOrElse(false)
+        if (!isMain)
+          false.pure[F]
+        else
+          getLabels(pullRequest.number)
+            .compile
+            .toList
+            .map(labels => isAutoBump(pullRequest, labels))
+      }
       .head
       .compile
       .toList
@@ -300,6 +306,13 @@ class AutoBump(
           NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
           updateBranch.name,
           "master")
+        .handleErrorWith(_ =>
+          DraftPullRequests[F].draftPullRequest(
+            owner,
+            repoSlug,
+            NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
+            updateBranch.name,
+            "main"))
         .rethrowGHError("draftPullRequest")
       _ <- assignLabel(AutoBumpLabel, pr)
     } yield pr

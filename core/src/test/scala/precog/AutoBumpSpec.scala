@@ -55,7 +55,18 @@ class AutoBumpSpec
   "getOldestAutoBumpPullRequest" should {
     val getOldest = autobump.getOldestAutoBumpPullRequest[Test]
 
-    "find autobump pull requests" in {
+    "find autobump pull requests - main" in {
+      val env = TestEnv
+        .empty
+        .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
+        .withPR(owner, repoSlug, "Auto Bump", "", "trickle/branch", "main", "OPEN", true)
+
+      val result = getOldest.runA(env).unsafeRunSync()
+
+      result must beSome(matchA[PullRequestDraft].title("Auto Bump"))
+    }
+
+    "find autobump pull requests - master" in {
       val env = TestEnv
         .empty
         .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
@@ -81,7 +92,7 @@ class AutoBumpSpec
       result must beSome(matchA[PullRequestDraft].title("Auto Bump 1"))
     }
 
-    "ignore pull requests not to master" in {
+    "ignore pull requests not to master or main - master" in {
       val env = TestEnv
         .empty
         .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
@@ -98,6 +109,29 @@ class AutoBumpSpec
           true)
         .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "dev", "OPEN", true)
         .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/branch", "master", "OPEN", true)
+
+      val result = getOldest.runA(env).unsafeRunSync()
+
+      result must beSome(matchA[PullRequestDraft].title("Auto Bump 3"))
+    }
+
+    "ignore pull requests not to master or main - main" in {
+      val env = TestEnv
+        .empty
+        .withLabel(owner, repoSlug, 1, AutoBump.AutoBumpLabel)
+        .withLabel(owner, repoSlug, 2, AutoBump.AutoBumpLabel)
+        .withLabel(owner, repoSlug, 3, AutoBump.AutoBumpLabel)
+        .withPR(
+          owner,
+          repoSlug,
+          "Auto Bump 1",
+          "",
+          "trickle/branch",
+          "trickle/master",
+          "OPEN",
+          true)
+        .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "dev", "OPEN", true)
+        .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/branch", "main", "OPEN", true)
 
       val result = getOldest.runA(env).unsafeRunSync()
 
@@ -125,7 +159,7 @@ class AutoBumpSpec
         .withLabel(owner, repoSlug, 2, AutoBump.AutoBumpLabel)
         .withLabel(owner, repoSlug, 3, AutoBump.AutoBumpLabel)
         .withPR(owner, repoSlug, "Auto Bump 1", "", "trickle/branch", "master", "OPEN", true)
-        .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "master", "OPEN", true)
+        .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "main", "OPEN", true)
         .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/branch", "master", "OPEN", true)
 
       val result = getOldest.runA(env).unsafeRunSync()
@@ -140,7 +174,7 @@ class AutoBumpSpec
         .withLabel(owner, repoSlug, 2, AutoBump.AutoBumpLabel)
         .withLabel(owner, repoSlug, 3, AutoBump.AutoBumpLabel)
         .withPR(owner, repoSlug, "Auto Bump 1", "", "trickle/branch", "master", "CLOSED", true)
-        .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "master", "MERGED", true)
+        .withPR(owner, repoSlug, "Auto Bump 2", "", "trickle/branch", "main", "MERGED", true)
         .withPR(owner, repoSlug, "Auto Bump 3", "", "trickle/branch", "master", "OPEN", true)
 
       val result = getOldest.runA(env).unsafeRunSync()
