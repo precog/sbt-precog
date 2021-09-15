@@ -16,10 +16,10 @@ fi
 set -u
 
 TRICKLE_TASKS=
-if [[ "$GITHUB_REF" == 'refs/heads/master' ]]; then
+if [[ "$GITHUB_REF" == 'refs/heads/master' || "$GITHUB_REF" == 'refs/heads/main' ]]; then
   TRICKLE_TASKS=';trickleUpdateSelf ;trickleCreatePullRequests'
 else
-  echo "Publication is running on '$GITHUB_REF', which is not the master branch; skipping Trickle updates"
+  echo "Publication is running on '$GITHUB_REF', which is not the master or main branch; skipping Trickle updates"
 fi
 
 openssl aes-256-cbc -md sha1 -pass env:ENCRYPTION_PASSWORD -in signing-secret.pgp.enc -d | gpg --import
