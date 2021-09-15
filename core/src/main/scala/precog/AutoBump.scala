@@ -306,14 +306,16 @@ class AutoBump(
           NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
           updateBranch.name,
           "master")
-        .handleErrorWith(_ =>
-          DraftPullRequests[F].draftPullRequest(
-            owner,
-            repoSlug,
-            NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
-            updateBranch.name,
-            "main"))
         .rethrowGHError("draftPullRequest")
+        .handleErrorWith(_ =>
+          DraftPullRequests[F]
+            .draftPullRequest(
+              owner,
+              repoSlug,
+              NewPullRequestData(autoBumpCommitTitle(authorRepository), description),
+              updateBranch.name,
+              "main")
+            .rethrowGHError("draftPullRequest"))
       _ <- assignLabel(AutoBumpLabel, pr)
     } yield pr
   }
