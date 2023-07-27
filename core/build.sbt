@@ -25,13 +25,7 @@ scalacOptions += "-Ypartial-unification"
 Test / testOptions += Tests.Argument("tmpdir", (target.value / "tests" / "tmp").getPath)
 
 enablePlugins(GraphQLCodegenPlugin)
-
-libraryDependencies ++= Seq(
-  compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.7.0" cross CrossVersion.full),
-  "com.github.ghik" % "silencer-lib" % "1.7.0" % Provided cross CrossVersion.full
-)
-
-scalacOptions += s"-P:silencer:pathFilters=${sourceManaged.value}/.*"
+scalacOptions += "-Wconf:src=src_managed/.*:silent"
 
 graphqlCodegenSchema := (Compile / resourceDirectory).value / "core" / "schema.graphql"
 graphqlCodegenJson := JsonCodec.Circe

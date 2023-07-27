@@ -21,20 +21,15 @@ import java.nio.file.Path
 import sbt.internal.util.codec.JValueFormats
 import sbt.util.FileBasedStore
 import sjsonnew.BasicJsonProtocol
-import sjsonnew.IsoString
 import sjsonnew.shaded.scalajson.ast.unsafe.JField
 import sjsonnew.shaded.scalajson.ast.unsafe.JObject
 import sjsonnew.shaded.scalajson.ast.unsafe.JString
 import sjsonnew.shaded.scalajson.ast.unsafe.JValue
-import sjsonnew.support.scalajson.unsafe.Converter
-import sjsonnew.support.scalajson.unsafe.Parser
-import sjsonnew.support.scalajson.unsafe.PrettyPrinter
 
 final class ManagedVersions private (path: Path) extends BasicJsonProtocol with JValueFormats {
 
   private[this] lazy val store: FileBasedStore[JValue] =
-    new FileBasedStore(path.toFile, Converter)(
-      IsoString.iso(PrettyPrinter.apply, Parser.parseUnsafe))
+    new FileBasedStore(path.toFile)
 
   def apply(key: String): String =
     get(key).getOrElse(sys.error(s"unable to find string -> string mapping for key '$key'"))

@@ -30,7 +30,7 @@ object SbtPrecog extends SbtPrecogBase {
   object autoImport extends autoImport {
 
     lazy val noPublishSettings =
-      Seq(publish := {}, publishLocal := {}, publishArtifact := false, skip in publish := true)
+      Seq(publish := {}, publishLocal := {}, publishArtifact := false, publish / skip := true)
   }
 
   import GitHubPackagesPlugin.autoImport._
