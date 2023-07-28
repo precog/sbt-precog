@@ -133,7 +133,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check PR labels
-        uses: docker://agilepathway/pull-request-label-checker:latest
+        uses: agilepathway/label-checker@1.4.30
         with:
           one_of: 'version: breaking,version: feature,version: revision,version: release'
           none_of: ':stop_sign:'
