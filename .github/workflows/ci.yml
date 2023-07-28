@@ -123,49 +123,13 @@ jobs:
       - name: Publish artifacts and create tag
         run: ./scripts/publishAndTag ${{ github.repository }}
 
-  auto-merge:
-    name: Auto Merge
-    needs: [build]
-    if: 'github.event_name == ''pull_request'' && contains(github.head_ref, ''version-bump'') && contains(github.event.pull_request.labels.*.name, ''version: revision'')'
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        scala: [2.12.18]
-        java: [adopt@1.8]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout current branch (fast)
-        uses: actions/checkout@v2
-
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v13
-        with:
-          java-version: ${{ matrix.java }}
-
-      - name: Common sbt setup
-        run: $SBT ++${{ matrix.scala }} transferCommonResources
-
-      - name: Fetch the latest sdmerge
-        run: |
-          curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge
-          chmod +x /tmp/sdmerge
-
-      - name: Self-merge
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          git config --global user.email "bot@precog.com"
-          git config --global user.name "Precog Bot"
-          /tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER
-
   check-labels:
     name: Check Labels
-    needs: [build]
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && 
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(["main", "master"], github.base_ref)
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.12.18]
+        scala: [2.13.4]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
