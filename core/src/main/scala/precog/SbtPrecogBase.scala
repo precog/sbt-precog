@@ -213,23 +213,22 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // ),
 
       // Make sure that the right labels are applied for PRs targetting main branches
-      githubWorkflowAddedJobs += WorkflowJob(
-        "check-labels",
-        "Check Labels",
-        List(
-          WorkflowStep.Use(
-            name = Some("Check PR labels"),
-            ref = UseRef.Docker("agilepathway/pull-request-label-checker", "latest"),
-            params = Map(
-              "one_of" -> "version: breaking,version: feature,version: revision,version: release",
-              "none_of" -> ":stop_sign:"
-            )
-          )
-        ),
-        cond = Some(
-          // TODO when it is a non-draft PR targetting main/master
-          "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)")
-      ),
+      // githubWorkflowAddedJobs += WorkflowJob(
+      //   "check-labels",
+      //   "Check Labels",
+      //   List(
+      //     WorkflowStep.Use(
+      //       name = Some("Check PR labels"),
+      //       ref = UseRef.Docker("agilepathway/pull-request-label-checker", "latest"),
+      //       params = Map(
+      //         "one_of" -> "version: breaking,version: feature,version: revision,version: release",
+      //         "none_of" -> ":stop_sign:"
+      //       )
+      //     )
+      //   ),
+      //   cond = Some(
+      //     "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)")
+      // ),
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
