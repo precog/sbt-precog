@@ -157,3 +157,20 @@ jobs:
           git config --global user.email "bot@precog.com"
           git config --global user.name "Precog Bot"
           /tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER
+
+  check-labels:
+    name: Check Labels
+    needs: [build]
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && 
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.12.18]
+        java: [adopt@1.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check PR labels
+        uses: docker://agilepathway/pull-request-label-checker:latest
+        with:
+          one_of: 'version: breaking,version: feature,version: revision,version: release'
+          none_of: ':stop_sign:'

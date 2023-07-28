@@ -55,12 +55,12 @@ import sbtghactions.GitHubActionsPlugin
 import sbtghactions.GitHubActionsPlugin.autoImport._
 import sbtghactions.Ref
 import sbtghactions.RefPredicate
+import sbtghactions.UseRef
 import sbtghactions.WorkflowJob
 import sbtghactions.WorkflowStep
 import sbttrickle.TricklePlugin
 import sbttrickle.TricklePlugin.autoImport._
 import sbttrickle.metadata.ModuleUpdateData
-import sbtghactions.UseRef
 
 abstract class SbtPrecogBase extends AutoPlugin {
   private var foundLocalEvictions: Set[(String, String)] = Set()
@@ -223,14 +223,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
             params = Map(
               "one_of" -> "version: breaking,version: feature,version: revision,version: release",
               "none_of" -> ":stop_sign:"
-              )
             )
+          )
         ),
         cond = Some(
           // TODO when it is a non-draft PR targetting main/master
           "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)")
       ),
-
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
