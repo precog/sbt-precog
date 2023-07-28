@@ -125,7 +125,7 @@ jobs:
 
   check-labels:
     name: Check Labels
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft 
     strategy:
       matrix:
         os: [ubuntu-latest]
