@@ -219,10 +219,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
         List(
           WorkflowStep.Use(
             name = Some("Check PR labels"),
-            ref = UseRef.Public("agilepathway", "label-checker", "v1.4.30"),
+            ref = UseRef.Docker("agilepathway/pull-request-label-checker", "v1.4.30"),
             params = Map(
               "one_of" -> "version: breaking,version: feature,version: revision,version: release",
-              "none_of" -> ":stop_sign:"
+              "none_of" -> ":stop_sign:",
+              "repo_token" -> "${{ env.GITHUB_TOKEN }}"
             )
           )
         ),
