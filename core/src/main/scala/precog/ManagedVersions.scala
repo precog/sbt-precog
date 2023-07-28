@@ -36,7 +36,7 @@ final class ManagedVersions private (path: Path) extends BasicJsonProtocol with 
     get(key).getOrElse(sys.error(s"unable to find string -> string mapping for key '$key'"))
 
   def get(key: String): Option[String] = {
-    val r = safeRead() 
+    val r = safeRead()
     r match {
       case JObject(values) =>
         values.find(_.field == key) match {
@@ -84,7 +84,7 @@ final class ManagedVersions private (path: Path) extends BasicJsonProtocol with 
     try {
       store.read[JValue]()
     } catch {
-      case _: sbt.internal.util.EmptyCacheError  =>
+      case _: sbt.internal.util.EmptyCacheError =>
         val back = JObject(Array[JField]())
         store.write(back)
         back

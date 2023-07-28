@@ -16,6 +16,8 @@
 
 package precog.interpreters
 
+import scala.annotation.nowarn
+
 import cats.effect.Sync
 import cats.implicits._
 import github4s.GHResponse
@@ -26,7 +28,6 @@ import graphql.codegen.markReadyForReview.MarkForReview
 import precog.algebras._
 import precog.domain.DraftPullRequest._
 import precog.domain._
-import scala.annotation.nowarn
 
 class DraftPullRequestsInterpreter[F[_]: Sync](
     client: HttpClient[F],
