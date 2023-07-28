@@ -28,14 +28,16 @@ import sjsonnew.shaded.scalajson.ast.unsafe.JValue
 
 final class ManagedVersions private (path: Path) extends BasicJsonProtocol with JValueFormats {
 
-  private[this] lazy val store: FileBasedStore[JValue] =
+  private[this] lazy val store: FileBasedStore[JValue] = {
     new FileBasedStore(path.toFile)
+  }
 
   def apply(key: String): String =
     get(key).getOrElse(sys.error(s"unable to find string -> string mapping for key '$key'"))
 
   def get(key: String): Option[String] = {
-    safeRead() match {
+    val r = safeRead() 
+    r match {
       case JObject(values) =>
         values.find(_.field == key) match {
           case Some(JField(_, JString(value))) => Some(value)
@@ -82,7 +84,11 @@ final class ManagedVersions private (path: Path) extends BasicJsonProtocol with 
     try {
       store.read[JValue]()
     } catch {
-      case _: sbt.internal.util.EmptyCacheError =>
+      case _: sbt.internal.util.EmptyCacheError  =>
+        val back = JObject(Array[JField]())
+        store.write(back)
+        back
+      case _: sjsonnew.shaded.org.typelevel.jawn.IncompleteParseException =>
         val back = JObject(Array[JField]())
         store.write(back)
         back
