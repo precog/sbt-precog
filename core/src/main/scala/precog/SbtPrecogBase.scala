@@ -223,12 +223,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
             params = Map(
               "one_of" -> "version: breaking,version: feature,version: revision,version: release",
               "none_of" -> ":stop_sign:",
-              "repo_token" -> "${{ env.GITHUB_TOKEN }}"
+              "repo_token" -> s"$${{ env.GITHUB_TOKEN }}"
             )
           )
         ),
-        // cond = Some(
-          // "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)"),
+        cond = Some("github.event_name == 'pull_request'")
+          // && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)"),
         // needs = List("build"),
         // scalas = List(scalaVersion.value)
       ),
