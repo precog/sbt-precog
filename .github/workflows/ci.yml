@@ -122,19 +122,3 @@ jobs:
 
       - name: Publish artifacts and create tag
         run: ./scripts/publishAndTag ${{ github.repository }}
-
-  check-labels:
-    name: Check Labels
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft && contains(["main", "master"], github.base_ref)
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        scala: [2.13.4]
-        java: [adopt@1.8]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Check PR labels
-        uses: docker://agilepathway/pull-request-label-checker:latest
-        with:
-          one_of: 'version: breaking,version: feature,version: revision,version: release'
-          none_of: ':stop_sign:'
