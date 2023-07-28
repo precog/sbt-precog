@@ -184,51 +184,53 @@ abstract class SbtPrecogBase extends AutoPlugin {
         RefPredicate.Equals(Ref.Branch("master"))),
 
       // TODO this needs to be fixed... somehow
-      githubWorkflowAddedJobs += WorkflowJob(
-        "auto-merge",
-        "Auto Merge",
-        List(
-          WorkflowStep.Checkout,
-          WorkflowStep.SetupScala,
-          WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
-          WorkflowStep.Run(
-            List(
-              "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
-              "chmod +x /tmp/sdmerge"),
-            name = Some("Fetch the latest sdmerge")
-          ),
-          WorkflowStep.Run(
-            List(
-              "git config --global user.email \"bot@precog.com\"",
-              "git config --global user.name \"Precog Bot\"",
-              "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
-            name = Some("Self-merge"),
-            env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}")
-          )
-        ),
-        cond = Some(
-          "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
-        needs = List("build"),
-        scalas = List(scalaVersion.value)
-      ),
-
-      // Make sure that the right labels are applied for PRs targetting main branches
       // githubWorkflowAddedJobs += WorkflowJob(
-      //   "check-labels",
-      //   "Check Labels",
+      //   "auto-merge",
+      //   "Auto Merge",
       //   List(
-      //     WorkflowStep.Use(
-      //       name = Some("Check PR labels"),
-      //       ref = UseRef.Docker("agilepathway/pull-request-label-checker", "latest"),
-      //       params = Map(
-      //         "one_of" -> "version: breaking,version: feature,version: revision,version: release",
-      //         "none_of" -> ":stop_sign:"
-      //       )
+      //     WorkflowStep.Checkout,
+      //     WorkflowStep.SetupScala,
+      //     WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
+      //     WorkflowStep.Run(
+      //       List(
+      //         "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
+      //         "chmod +x /tmp/sdmerge"),
+      //       name = Some("Fetch the latest sdmerge")
+      //     ),
+      //     WorkflowStep.Run(
+      //       List(
+      //         "git config --global user.email \"bot@precog.com\"",
+      //         "git config --global user.name \"Precog Bot\"",
+      //         "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
+      //       name = Some("Self-merge"),
+      //       env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}")
       //     )
       //   ),
       //   cond = Some(
-      //     "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)")
+      //     "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
+      //   needs = List("build"),
+      //   scalas = List(scalaVersion.value)
       // ),
+
+      // Make sure that the right labels are applied for PRs targetting main branches
+      githubWorkflowAddedJobs += WorkflowJob(
+        "check-labels",
+        "Check Labels",
+        List(
+          WorkflowStep.Use(
+            name = Some("Check PR labels"),
+            ref = UseRef.Docker("agilepathway/pull-request-label-checker", "latest"),
+            params = Map(
+              "one_of" -> "version: breaking,version: feature,version: revision,version: release",
+              "none_of" -> ":stop_sign:"
+            )
+          )
+        ),
+        cond = Some(
+          "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)"),
+        needs = List("build")
+      ),
+      
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
