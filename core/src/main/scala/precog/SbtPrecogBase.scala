@@ -228,7 +228,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
         ),
         cond = Some(
           "github.event_name == 'pull_request' && !github.event.pull_request.draft && contains([\"main\", \"master\"], github.base_ref)"),
-        needs = List("build")
+        needs = List("build"),
+        scalas = List(scalaVersion.value)
       ),
       
       githubWorkflowGeneratedCI := {
