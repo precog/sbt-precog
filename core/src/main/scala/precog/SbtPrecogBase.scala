@@ -321,7 +321,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                 |  // set outputs for 
                 |  const result = {
                 |    nextVersion: nextVersion,
-                |    commitMessage: nextVersion + ": " + pr.body.replaceAll("\\r\\n", "\\n")
+                |    commitMessage: "Version release: " nextVersion + "\n" + pr.body.replaceAll("\\r\\n", "\\n")
                 |  }
                 |  return result
               |""".stripMargin
@@ -347,14 +347,13 @@ abstract class SbtPrecogBase extends AutoPlugin {
         // We check that it's a push. We don't need to check for whether the branch
         // is right because the whole workflow is set to only run on either pull requests or 
         // pushes to main/master, so a check that it's a push is enough
-        // cond = Some("github.event_name == 'push'")
+        cond = Some("github.event_name == 'push'")
       ),
 
-      // TODO
-      // githubWorkflowPublishCond ~= { 
-      //   case None => ""
-      //   case Some(cond) => s"$cond && startsWith(github.commits[0].message, "")"
-      // },
+      githubWorkflowPublishCond ~= { condMaybe =>
+        val extraCondition = """startsWith(github.commits[0].message, "Version release: ")"""
+        condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
+      },
 
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
