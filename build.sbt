@@ -1,11 +1,10 @@
 description := "Common build configuration for SBT projects"
 
-ThisBuild / sbtVersion := "1.3.13"
-ThisBuild / scalaVersion := "2.12.12"
+ThisBuild / sbtVersion := "1.9.3"
+ThisBuild / scalaVersion := "2.12.18"
 
 ThisBuild / githubOwner := "precog"
 ThisBuild / githubRepository := "sbt-precog"
-ThisBuild / githubTokenSource := TokenSource.Environment("GITHUB_TOKEN")
 
 lazy val root = project
   .in(file("."))

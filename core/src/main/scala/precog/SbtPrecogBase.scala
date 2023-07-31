@@ -108,7 +108,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
       outputStrategy := Some(StdoutOutput),
       autoCompilerPlugins := true,
       autoAPIMappings := true,
-      addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.1" cross CrossVersion.full),
+      addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.2" cross CrossVersion.full),
       addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
       // default to true
@@ -129,7 +129,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         val strict = scalacStrictMode.value
         if (strict) Seq() else Seq("-Xfatal-warnings")
       },
-      scalacOptions in (Compile, doc) -= "-Xfatal-warnings",
+      Compile / doc / scalacOptions -= "-Xfatal-warnings",
       unsafeEvictionsCheck := unsafeEvictionsCheckTask.value
     ) ++ scalafmtSettings ++ headerLicenseSettings
 
@@ -271,7 +271,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         organizationHomepage := Some(url("https://precog.com")),
         managedVersions := ManagedVersions(
           ((LocalRootProject / baseDirectory).value / VersionsPath).toPath),
-        resolvers := Seq(Resolver.sonatypeRepo("releases")),
+        resolvers := Resolver.sonatypeOssRepos("releases"),
         checkLocalEvictions := {
           if (foundLocalEvictions.nonEmpty) {
             sys.error(
@@ -370,7 +370,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
     val module = ivyModule.value
     val isFatal = unsafeEvictionsFatal.value
     val conf = unsafeEvictionsConf.value
-    val ewo = (evictionWarningOptions in unsafeEvictionsCheck).value
+    val ewo = (unsafeEvictionsCheck / evictionWarningOptions).value
     val report = (updateFull tag (Tags.Update, Tags.Network)).value
     val log = streams.value.log
     precog.UnsafeEvictions.check(currentProject, module, isFatal, conf, ewo, report, log)

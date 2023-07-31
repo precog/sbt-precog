@@ -16,9 +16,10 @@
 
 package precog.interpreters
 
+import scala.annotation.nowarn
+
 import cats.effect.Sync
 import cats.implicits._
-import com.github.ghik.silencer.silent
 import github4s.GHResponse
 import github4s.domain._
 import github4s.http.HttpClient
@@ -123,7 +124,7 @@ object DraftPullRequestsInterpreter {
   object GithubQuery {
     implicit def encodeGraphQLQuery[A <: GraphQLQuery]: Encoder[A] =
       Encoder.encodeString.contramap[A](_.document.renderCompact)
-    @silent // varsEnc used by macro
+    @nowarn
     implicit def encodeGithubQuery[A <: GraphQLQuery](
         implicit varsEnc: Encoder[A#Variables]): Encoder[GithubQuery[A]] =
       deriveEncoder[GithubQuery[A]]
@@ -134,7 +135,7 @@ object DraftPullRequestsInterpreter {
    */
   final case class GithubResponse[A <: GraphQLQuery](data: A#Data)
   object GithubResponse {
-    @silent // dataDec used by macro
+    @nowarn
     implicit def decodeGithubResponse[A <: GraphQLQuery](
         implicit dataDec: Decoder[A#Data]): Decoder[GithubResponse[A]] =
       deriveDecoder[GithubResponse[A]]
