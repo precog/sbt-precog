@@ -142,7 +142,6 @@ jobs:
 
   next-version:
     name: Next version
-    if: github.event_name == 'push'
     strategy:
       matrix:
         os: [ubuntu-latest]

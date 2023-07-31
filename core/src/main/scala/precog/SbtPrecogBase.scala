@@ -345,7 +345,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         // We check that it's a push. We don't need to check for whether the branch
         // is right because the whole workflow is set to only run on either pull requests or 
         // pushes to main/master, so a check that it's a push is enough
-        cond = Some("github.event_name == 'push'")
+        // cond = Some("github.event_name == 'push'")
       ),
 
       // TODO
