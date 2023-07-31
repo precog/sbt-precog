@@ -10,7 +10,7 @@ name: Continuous Integration
 on:
   pull_request:
     branches: [master, main, backport/v*]
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, closed]
   push:
     branches: [master, main, backport/v*]
 
@@ -125,7 +125,7 @@ jobs:
 
   check-labels:
     name: Check Labels
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft 
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -139,3 +139,88 @@ jobs:
           one_of: 'version: breaking,version: feature,version: revision,version: release'
           none_of: ':stop_sign:'
           repo_token: ${{ env.GITHUB_TOKEN }}
+
+  next-version:
+    name: Next version
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        scala: [2.13.4]
+        java: [adopt@1.8]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout current branch (fast)
+        uses: actions/checkout@v2
+
+      - name: Get current version
+        id: current_version
+        run: echo "CURRENT_VERSION=$(cat version.sbt | awk '{ gsub(/"/, "", $5); print $5 }')" >> $GITHUB_OUTPUT
+
+      - name: Compute next version
+        id: compute_next_version
+        uses: actions/github-script@v6
+        with:
+          script: |
+
+              const currentVersion = '${{steps.current_version.outputs.CURRENT_VERSION}}'
+              const parsedVersion = currentVersion.split(".")
+              var major = Number(parsedVersion[0])
+              var minor = Number(parsedVersion[1])
+              var patch = Number(parsedVersion[2])
+
+              const opts = github.rest.repos.listPullRequestsAssociatedWithCommit({
+                context.repo.owner,
+                context.repo.repo,
+                context.sha,
+              })
+              const prs = await github.paginate(opts)
+
+              if (prs.length > 1) {
+                // TODO 
+              } 
+              const pr = prs[0]
+
+              for (const label of pr.labels) {
+                if (label.name === 'version: revision') {
+                   patch = patch + 1
+                   break
+                } else if (label.name === 'version: feature') {
+                   patch = 0
+                   minor = minor + 1
+                   break
+                } else if (label.name === 'version: breaking') {
+                   major = major + 1
+                   minor = 0
+                   patch = 0
+                   break
+                } else if (label.name === 'version: release') {
+                   major = major + 1
+                   minor = 0
+                   patch = 0
+                   break
+                }
+              }
+
+              const nextVersion = major + '.' + minor + '.' + patch
+
+              if (nextVersion === currentVersion) {
+                // TODO 
+              }
+
+              console.log("Setting the next version to " + nextVersion)
+
+              // set outputs for 
+              val result = {
+                nextVersion = nextVersion,
+                commitMessage = nextVersion + ": " + pr.body
+              }
+              return result
+
+      
+      - name: Modify version
+        run: 'echo ''ThisBuild / version := ${{steps.compute_next_version.outputs.nextVersion}}'' > version.sbt'
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: ${{steps.compute_next_version.outputs.commitMessage}}
