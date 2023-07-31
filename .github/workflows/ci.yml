@@ -75,7 +75,7 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/backport/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: 'github.event_name != ''pull_request'' && (github.ref == ''refs/heads/main'' || startsWith(github.ref, ''refs/heads/backport/v'') || github.ref == ''refs/heads/main'' || github.ref == ''refs/heads/master'') && (startsWith(github.commits[0].message, "Version release: "))'
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -142,6 +142,7 @@ jobs:
 
   next-version:
     name: Next version
+    if: github.event_name == 'push'
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -221,7 +222,8 @@ jobs:
               // set outputs for 
               const result = {
                 nextVersion: nextVersion,
-                commitMessage: nextVersion + ": " + pr.body.replaceAll("\r\n", "\n")
+                commitMessage: "Version release: " nextVersion + "
+            " + pr.body.replaceAll("\r\n", "\n")
               }
               return result
 
