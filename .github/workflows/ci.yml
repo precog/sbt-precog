@@ -142,6 +142,7 @@ jobs:
 
   next-version:
     name: Next version
+    if: github.event_name == 'push'
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -168,59 +169,69 @@ jobs:
               var minor = Number(parsedVersion[1])
               var patch = Number(parsedVersion[2])
 
-              const opts = github.rest.repos.listPullRequestsAssociatedWithCommit({
-                context.repo.owner,
-                context.repo.repo,
-                context.sha,
+              const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                // owner: context.repo.owner,
+                owner: "precog",
+                repo: context.repo.repo,
+                commit_sha: context.sha
               })
-              const prs = await github.paginate(opts)
 
-              if (prs.length > 1) {
-                // TODO 
+              const prs = prResponse.data
+
+              if (prs === undefined) {
+                throw new Error("Could not fetch PRs for commit: status " + prs.status)
+              } else if (prs.length > 1) {
+                throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
+              } else if (prs.length === 0) {
+                throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
               } 
+
               const pr = prs[0]
 
               for (const label of pr.labels) {
-                if (label.name === 'version: revision') {
-                   patch = patch + 1
-                   break
-                } else if (label.name === 'version: feature') {
-                   patch = 0
-                   minor = minor + 1
-                   break
-                } else if (label.name === 'version: breaking') {
-                   major = major + 1
-                   minor = 0
-                   patch = 0
-                   break
-                } else if (label.name === 'version: release') {
-                   major = major + 1
-                   minor = 0
-                   patch = 0
-                   break
-                }
+                 if (label.name === 'version: revision') {
+                    patch = patch + 1
+                    break
+                 } else if (label.name === 'version: feature') {
+                    patch = 0
+                    minor = minor + 1
+                    break
+                 } else if (label.name === 'version: breaking') {
+                    major = major + 1
+                    minor = 0
+                    patch = 0
+                    break
+                 } else if (label.name === 'version: release') {
+                    major = major + 1
+                    minor = 0
+                    patch = 0
+                    break
+                 }
               }
 
               const nextVersion = major + '.' + minor + '.' + patch
 
               if (nextVersion === currentVersion) {
-                // TODO 
+                throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
               }
 
               console.log("Setting the next version to " + nextVersion)
 
               // set outputs for 
-              val result = {
-                nextVersion = nextVersion,
-                commitMessage = nextVersion + ": " + pr.body
+              const result = {
+                nextVersion: nextVersion,
+                commitMessage: nextVersion + ": " + pr.body.replaceAll("\r\n", "\n")
               }
               return result
 
       
       - name: Modify version
-        run: 'echo ''ThisBuild / version := ${{steps.compute_next_version.outputs.nextVersion}}'' > version.sbt'
+        id: modify_version
+        run: |
+          echo "ThisBuild / version := $(echo '${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt
+          echo "COMMIT_MESSAGE=$(echo '${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')" >> $GITHUB_OUTPUT
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: ${{steps.compute_next_version.outputs.commitMessage}}
+          commit_message: ${{steps.modify_version.outputs.COMMIT_MESSAGE}}
