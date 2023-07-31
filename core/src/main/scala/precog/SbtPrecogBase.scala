@@ -236,7 +236,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         cond = Some("github.event_name == 'pull_request' && !github.event.pull_request.draft")
       ),
 
-      // Check whether we need to version bump 
+      // Check whether we need to version bump
       // We version bump when:
       //    - it's a push to the main/master branch
       //    - the push has an associated PR
@@ -262,70 +262,69 @@ abstract class SbtPrecogBase extends AutoPlugin {
             ref = UseRef.Public("actions", "github-script", "v6"),
             params = Map(
               "script" -> s"""
-                |  const currentVersion = '$${{steps.current_version.outputs.CURRENT_VERSION}}'
-                |  const parsedVersion = currentVersion.split(".")
-                |  var major = Number(parsedVersion[0])
-                |  var minor = Number(parsedVersion[1])
-                |  var patch = Number(parsedVersion[2])
-                |
-                |  console.log(context)
-                |
-                |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                |    // owner: context.repo.owner,
-                |    owner: "precog",
-                |    repo: context.repo.repo,
-                |    commit_sha: context.sha
-                |  })
-                |
-                |  const prs = prResponse.data
-                |
-                |  if (prs === undefined) {
-                |    throw new Error("Could not fetch PRs for commit: status " + prs.status)
-                |  } else if (prs.length > 1) {
-                |    throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
-                |  } else if (prs.length === 0) {
-                |    throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
-                |  } 
-                |
-                |  const pr = prs[0]
-                |
-                |  for (const label of pr.labels) {
-                |     if (label.name === 'version: revision') {
-                |        patch = patch + 1
-                |        break
-                |     } else if (label.name === 'version: feature') {
-                |        patch = 0
-                |        minor = minor + 1
-                |        break
-                |     } else if (label.name === 'version: breaking') {
-                |        major = major + 1
-                |        minor = 0
-                |        patch = 0
-                |        break
-                |     } else if (label.name === 'version: release') {
-                |        major = major + 1
-                |        minor = 0
-                |        patch = 0
-                |        break
-                |     }
-                |  }
-                |
-                |  const nextVersion = major + '.' + minor + '.' + patch
-                |   
-                |  if (nextVersion === currentVersion) {
-                |    throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
-                |  }
-                |  
-                |  console.log("Setting the next version to " + nextVersion)
-                |  
-                |  // set outputs for 
-                |  const result = {
-                |    nextVersion: nextVersion,
-                |    commitMessage: "Version release: " nextVersion + "\n" + pr.body.replaceAll("\\r\\n", "\\n")
-                |  }
-                |  return result
-              |""".stripMargin
-
+                             |  const currentVersion = '$${{steps.current_version.outputs.CURRENT_VERSION}}'
+                             |  const parsedVersion = currentVersion.split(".")
+                             |  var major = Number(parsedVersion[0])
+                             |  var minor = Number(parsedVersion[1])
+                             |  var patch = Number(parsedVersion[2])
+                             |
+                             |  console.log(context)
+                             |
+                             |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                             |    // owner: context.repo.owner,
+                             |    owner: "precog",
+                             |    repo: context.repo.repo,
+                             |    commit_sha: context.sha
+                             |  })
+                             |
+                             |  const prs = prResponse.data
+                             |
+                             |  if (prs === undefined) {
+                             |    throw new Error("Could not fetch PRs for commit: status " + prs.status)
+                             |  } else if (prs.length > 1) {
+                             |    throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
+                             |  } else if (prs.length === 0) {
+                             |    throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
+                             |  } 
+                             |
+                             |  const pr = prs[0]
+                             |
+                             |  for (const label of pr.labels) {
+                             |     if (label.name === 'version: revision') {
+                             |        patch = patch + 1
+                             |        break
+                             |     } else if (label.name === 'version: feature') {
+                             |        patch = 0
+                             |        minor = minor + 1
+                             |        break
+                             |     } else if (label.name === 'version: breaking') {
+                             |        major = major + 1
+                             |        minor = 0
+                             |        patch = 0
+                             |        break
+                             |     } else if (label.name === 'version: release') {
+                             |        major = major + 1
+                             |        minor = 0
+                             |        patch = 0
+                             |        break
+                             |     }
+                             |  }
+                             |
+                             |  const nextVersion = major + '.' + minor + '.' + patch
+                             |   
+                             |  if (nextVersion === currentVersion) {
+                             |    throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
+                             |  }
+                             |  
+                             |  console.log("Setting the next version to " + nextVersion)
+                             |  
+                             |  // set outputs for 
+                             |  const result = {
+                             |    nextVersion: nextVersion,
+                             |    commitMessage: "Version release: " nextVersion + "\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |  }
+                             |  return result
+                             |""".stripMargin
             )
           ),
           WorkflowStep.Run(
@@ -345,16 +344,14 @@ abstract class SbtPrecogBase extends AutoPlugin {
           )
         ),
         // We check that it's a push. We don't need to check for whether the branch
-        // is right because the whole workflow is set to only run on either pull requests or 
+        // is right because the whole workflow is set to only run on either pull requests or
         // pushes to main/master, so a check that it's a push is enough
         cond = Some("github.event_name == 'push'")
       ),
-
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, "Version release: ")"""
         condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
       },
-
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
