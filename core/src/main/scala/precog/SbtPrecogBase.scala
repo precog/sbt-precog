@@ -242,12 +242,12 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "next-version",
         "Next version",
         List(
-          // We have to replicate the checkout step ourselves to add the token to 
+          // We have to replicate the checkout step ourselves to add the token to
           // overcome the github limitation of commmits triggered by workflows
           // not triggerring additional workflows
           // https://github.com/marketplace/actions/git-auto-commit#commits-made-by-this-action-do-not-trigger-new-workflow-runs
           WorkflowStep.Use(
-            UseRef.Public("actions", "checkout", "v3"), 
+            UseRef.Public("actions", "checkout", "v3"),
             name = Some("Checkout current branch (fast)"),
             params = Map(
               "token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
@@ -333,7 +333,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
             name = Some("Modify version"),
             id = Some("modify_version"),
             commands = List(
-              s"""echo 'ThisBuild / version := "$${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"' > version.sbt""",
+              s"""echo 'ThisBuild / version := "$${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"' > version.sbt"""
             )
           ),
           WorkflowStep.Use(
@@ -352,7 +352,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
         //
         // Also, don't trigger a version bump on version bump commits or else we'll
         // just infinitely bump
-        cond = Some("github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
+        cond = Some(
+          "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
