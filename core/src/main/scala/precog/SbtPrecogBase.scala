@@ -194,33 +194,27 @@ abstract class SbtPrecogBase extends AutoPlugin {
         RefPredicate.Equals(Ref.Branch("master"))),
 
       // TODO this needs to be fixed... somehow
-      // githubWorkflowAddedJobs += WorkflowJob(
-      //   "auto-merge",
-      //   "Auto Merge",
-      //   List(
-      //     WorkflowStep.Checkout,
-      //     WorkflowStep.SetupScala,
-      //     WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
-      //     WorkflowStep.Run(
-      //       List(
-      //         "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
-      //         "chmod +x /tmp/sdmerge"),
-      //       name = Some("Fetch the latest sdmerge")
-      //     ),
-      //     WorkflowStep.Run(
-      //       List(
-      //         "git config --global user.email \"bot@precog.com\"",
-      //         "git config --global user.name \"Precog Bot\"",
-      //         "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
-      //       name = Some("Self-merge"),
-      //       env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}")
-      //     )
-      //   ),
-      //   cond = Some(
-      //     "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
-      //   needs = List("build"),
-      //   scalas = List(scalaVersion.value)
-      // ),
+      githubWorkflowAddedJobs += WorkflowJob(
+        "auto-merge",
+        "Auto Merge",
+        List(
+          WorkflowStep.Use(
+            name = Some("Merge"),
+            id = Some("merge"),
+            ref = UseRef.Public("actions", "github-script", "v6"),
+            params = Map(
+              "script" -> s"""  octokit.rest.pulls.merge({
+                             |    context.repo.owner,
+                             |    context.repo.repo,
+                             |    $${{ github.event.pull_request.number }},
+                             |  }); """.stripMargin
+            )
+          )
+        ),
+        cond = Some(
+          "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
+        needs = List("build")
+      ),
 
       // Make sure that the right labels are applied for PRs targetting main branches
       githubWorkflowAddedJobs += WorkflowJob(
@@ -265,14 +259,11 @@ abstract class SbtPrecogBase extends AutoPlugin {
             id = Some("compute_next_version"),
             ref = UseRef.Public("actions", "github-script", "v6"),
             params = Map(
-              "script" -> s"""
-                             |  const currentVersion = '$${{steps.current_version.outputs.CURRENT_VERSION}}'
+              "script" -> s"""  const currentVersion = '$${{steps.current_version.outputs.CURRENT_VERSION}}'
                              |  const parsedVersion = currentVersion.split(".")
                              |  var major = Number(parsedVersion[0])
                              |  var minor = Number(parsedVersion[1])
                              |  var patch = Number(parsedVersion[2])
-                             |
-                             |  console.log(context)
                              |
                              |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                              |    // owner: context.repo.owner,
@@ -325,15 +316,14 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  // set outputs for 
                              |  const result = {
                              |    nextVersion: nextVersion,
-                             |    commitMessage: "Version release: " nextVersion + "\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |    commitMessage: "Version release: " + nextVersion + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
                              |  }
-                             |  return result
-                             |""".stripMargin
+                             |  return result""".stripMargin
             )
           ),
           WorkflowStep.Run(
-            name = Some("Modify version"),
-            id = Some("modify_version"),
+            name = Some("Commit set up"),
+            id = Some("commit_set_up"),
             commands = List(
               s"""echo "ThisBuild / version := $$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt""",
               s"""echo \"COMMIT_MESSAGE=$$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')\" >> $$GITHUB_OUTPUT"""
@@ -343,7 +333,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
             name = Some("Commit changes"),
             ref = UseRef.Public("stefanzweifel", "git-auto-commit-action", "v4"),
             params = Map(
-              "commit_message" -> s"$${{steps.modify_version.outputs.COMMIT_MESSAGE}}"
+              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}"
             )
           )
         ),
@@ -353,7 +343,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
         cond = Some("github.event_name == 'push'")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
-        val extraCondition = """startsWith(github.commits[0].message, "Version release: ")"""
+        val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
         condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
       },
       githubWorkflowGeneratedCI := {
