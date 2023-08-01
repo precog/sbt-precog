@@ -364,7 +364,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
           "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
-        val extraCondition = """startsWith(github.event.head_commit.message, 'Version release')"""
+        val extraCondition =
+          """startsWith(github.event.head_commit.message, 'Version release')"""
         condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
       },
       githubWorkflowGeneratedCI := {
