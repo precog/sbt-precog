@@ -190,7 +190,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
         RefPredicate.StartsWith(Ref.Branch("backport/v")),
         RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
-
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",
         "Auto Merge",
