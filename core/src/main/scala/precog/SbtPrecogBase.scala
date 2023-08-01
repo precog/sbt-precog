@@ -242,6 +242,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "next-version",
         "Next version",
         List(
+          // We have to replicate the checkout step ourselves to add the token to
+          // overcome the github limitation of commmits triggered by workflows
+          // not triggerring additional workflows
+          // https://github.com/marketplace/actions/git-auto-commit#commits-made-by-this-action-do-not-trigger-new-workflow-runs
+          WorkflowStep.Use(
+            UseRef.Public("actions", "checkout", "v3"),
+            name = Some("Checkout current branch (fast)"),
+            params = Map(
+              "token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
+            )
+          ),
           WorkflowStep.Checkout,
           // Get current version
           WorkflowStep.Run(
@@ -264,8 +275,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  var patch = Number(parsedVersion[2])
                              |
                              |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                             |    // owner: context.repo.owner,
-                             |    owner: "precog",
+                             |    owner: context.repo.owner,
                              |    repo: context.repo.repo,
                              |    commit_sha: context.sha
                              |  })
@@ -314,31 +324,36 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  // set outputs for 
                              |  const result = {
                              |    nextVersion: nextVersion,
-                             |    commitMessage: "Version release: " + nextVersion + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |    commitMessage: "Version release: " + nextVersion + "\\n\\n" + pr.title + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
                              |  }
                              |  return result""".stripMargin
             )
           ),
           WorkflowStep.Run(
-            name = Some("Commit set up"),
-            id = Some("commit_set_up"),
+            name = Some("Modify version"),
+            id = Some("modify_version"),
             commands = List(
-              s"""echo "ThisBuild / version := $$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt""",
-              s"""echo \"COMMIT_MESSAGE=$$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')\" >> $$GITHUB_OUTPUT"""
+              s"""echo 'ThisBuild / version := "$${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"' > version.sbt"""
             )
           ),
           WorkflowStep.Use(
             name = Some("Commit changes"),
             ref = UseRef.Public("stefanzweifel", "git-auto-commit-action", "v4"),
             params = Map(
-              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}"
+              "commit_message" -> s"$${{fromJson(steps.compute_next_version.outputs.result).commitMessage}}",
+              "commit_user_name" -> "precog-bot",
+              "commit_user_email" -> "bot@precog.com"
             )
           )
         ),
         // We check that it's a push. We don't need to check for whether the branch
         // is right because the whole workflow is set to only run on either pull requests or
         // pushes to main/master, so a check that it's a push is enough
-        cond = Some("github.event_name == 'push'")
+        //
+        // Also, don't trigger a version bump on version bump commits or else we'll
+        // just infinitely bump
+        cond = Some(
+          "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
@@ -347,8 +362,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
-            job.copy(cond =
-              Some("!(github.event_name == 'pull_request' && github.event.pull_request.draft)"))
+            job.copy(cond = {
+              val dontRunOnDraftPRs =
+                "!(github.event_name == 'pull_request' && github.event.pull_request.draft)"
+              // If we are in a situation in which a version bump commit is gonna get generated - don't bother running
+              // the 'build' job.
+              //
+              // I.e. if a push was made to main/master and it isn't a `Version release` - don't run
+              val dontRunBeforeVersionBump =
+                "!(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && !startsWith(github.commits[0].message, 'Version release'))"
+              Some(s"$dontRunOnDraftPRs && $dontRunBeforeVersionBump")
+            })
           else
             job
         }
