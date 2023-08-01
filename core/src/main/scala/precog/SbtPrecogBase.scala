@@ -191,7 +191,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
         RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
 
-      // TODO this needs to be fixed... somehow
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",
         "Auto Merge",
