@@ -201,10 +201,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
             id = Some("merge"),
             ref = UseRef.Public("actions", "github-script", "v6"),
             params = Map(
-              "script" -> s"""  octokit.rest.pulls.merge({
-                             |    context.repo.owner,
-                             |    context.repo.repo,
-                             |    $${{ github.event.pull_request.number }},
+              "script" -> s"""  github.rest.pulls.merge({
+                             |    owner: context.repo.owner,
+                             |    repo: context.repo.repo,
+                             |    pull_number: $${{ github.event.pull_request.number }},
                              |  }); """.stripMargin
             )
           )
@@ -364,7 +364,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
           "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
-        val extraCondition = """startsWith(github.event.head_commit.message, 'Version release')"""
+        val extraCondition =
+          """startsWith(github.event.head_commit.message, 'Version release')"""
         condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
       },
       githubWorkflowGeneratedCI := {

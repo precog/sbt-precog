@@ -121,10 +121,10 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-              octokit.rest.pulls.merge({
-                context.repo.owner,
-                context.repo.repo,
-                ${{ github.event.pull_request.number }},
+              github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: ${{ github.event.pull_request.number }},
               }); 
 
   check-labels:
