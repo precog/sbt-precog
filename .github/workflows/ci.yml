@@ -156,6 +156,11 @@ jobs:
     steps:
       - name: Checkout current branch (fast)
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PRECOG_GITHUB_TOKEN }}
+
+      - name: Checkout current branch (fast)
+        uses: actions/checkout@v3
 
       - name: Get current version
         id: current_version
@@ -173,8 +178,7 @@ jobs:
               var patch = Number(parsedVersion[2])
 
               const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                // owner: context.repo.owner,
-                owner: "precog",
+                owner: context.repo.owner,
                 repo: context.repo.repo,
                 commit_sha: context.sha
               })
@@ -227,15 +231,13 @@ jobs:
               }
               return result
 
-      - name: Commit set up
-        id: commit_set_up
-        run: |
-          echo "ThisBuild / version := $(echo '${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt
-          echo "COMMIT_MESSAGE=$(echo '${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')" >> $GITHUB_OUTPUT
+      - name: Modify version
+        id: modify_version
+        run: 'echo ''ThisBuild / version := "${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"'' > version.sbt'
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: ${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}
+          commit_message: ${{fromJson(steps.compute_next_version.outputs.result).commitMessage}}
           commit_user_name: precog-bot
           commit_user_email: bot@precog.com
