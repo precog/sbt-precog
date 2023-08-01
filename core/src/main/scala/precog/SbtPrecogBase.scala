@@ -253,7 +253,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
               "token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
             )
           ),
-          WorkflowStep.Checkout,
           // Get current version
           WorkflowStep.Run(
             List(
@@ -359,8 +358,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
         //
         // Also, don't trigger a version bump on version bump commits or else we'll
         // just infinitely bump
-        cond = Some(
-          "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
+        // cond = Some(
+        //   "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
