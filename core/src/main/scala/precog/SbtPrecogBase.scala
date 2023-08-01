@@ -202,9 +202,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
             ref = UseRef.Public("actions", "github-script", "v6"),
             params = Map(
               "script" -> s"""  octokit.rest.pulls.merge({
-                             |    context.repo.owner,
-                             |    context.repo.repo,
-                             |    $${{ github.event.pull_request.number }},
+                             |    owner: context.repo.owner,
+                             |    repo: context.repo.repo,
+                             |    pull_number: $${{ github.event.pull_request.number }},
                              |  }); """.stripMargin
             )
           )
