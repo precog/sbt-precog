@@ -330,18 +330,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
             )
           ),
           WorkflowStep.Run(
-            name = Some("Commit set up"),
-            id = Some("commit_set_up"),
+            name = Some("Modify version"),
+            id = Some("modify_version"),
             commands = List(
-              s"""echo "ThisBuild / version := $$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt""",
-              s"""echo \"COMMIT_MESSAGE=$$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')\" >> $$GITHUB_OUTPUT"""
+              s"""echo 'ThisBuild / version := "$${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"' > version.sbt""",
             )
           ),
           WorkflowStep.Use(
             name = Some("Commit changes"),
             ref = UseRef.Public("stefanzweifel", "git-auto-commit-action", "v4"),
             params = Map(
-              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}",
+              "commit_message" -> s"$${{fromJson(steps.compute_next_version.outputs.result).commitMessage}}",
               "commit_user_name" -> "precog-bot",
               "commit_user_email" -> "bot@precog.com"
             )
