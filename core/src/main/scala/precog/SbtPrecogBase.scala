@@ -331,14 +331,19 @@ abstract class SbtPrecogBase extends AutoPlugin {
             name = Some("Commit changes"),
             ref = UseRef.Public("stefanzweifel", "git-auto-commit-action", "v4"),
             params = Map(
-              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}"
+              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}",
+              "commit_user_name" -> "precog-bot",
+              "commit_user_email" -> "bot@precog.com"
             )
           )
         ),
         // We check that it's a push. We don't need to check for whether the branch
         // is right because the whole workflow is set to only run on either pull requests or
         // pushes to main/master, so a check that it's a push is enough
-        cond = Some("github.event_name == 'push'")
+        //
+        // Also, don't trigger a version bump on version bump commits or else we'll
+        // just infinitely bump
+        cond = Some("github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
