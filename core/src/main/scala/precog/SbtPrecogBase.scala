@@ -324,7 +324,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  // set outputs for 
                              |  const result = {
                              |    nextVersion: nextVersion,
-                             |    commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + "\n" + pr.body.replaceAll("\r\n", "\n")
+                             |    commitMessage: "Version release: " + nextVersion + "\\n\\n" + pr.title + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
                              |  }
                              |  return result""".stripMargin
             )
@@ -362,8 +362,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")
-            job.copy(cond =
-              Some("!(github.event_name == 'pull_request' && github.event.pull_request.draft)"))
+            job.copy(cond = {
+              val dontRunOnDraftPRs =
+                "!(github.event_name == 'pull_request' && github.event.pull_request.draft)"
+              // If we are in a situation in which a version bump commit is gonna get generated - don't bother running
+              // the 'build' job.
+              //
+              // I.e. if a push was made to main/master and it isn't a `Version release` - don't run
+              val dontRunBeforeVersionBump =
+                "!(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && !startsWith(github.commits[0].message, 'Version release'))"
+              Some(s"$dontRunOnDraftPRs && $dontRunBeforeVersionBump")
+            })
           else
             job
         }

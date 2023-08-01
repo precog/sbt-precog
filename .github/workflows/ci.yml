@@ -24,7 +24,7 @@ env:
 jobs:
   build:
     name: Build and Test
-    if: '!(github.event_name == ''pull_request'' && github.event.pull_request.draft)'
+    if: '!(github.event_name == ''pull_request'' && github.event.pull_request.draft) && !(github.event_name == ''push'' && (github.ref == ''refs/heads/main'' || github.ref == ''refs/heads/master'') && !startsWith(github.commits[0].message, ''Version release''))'
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -227,12 +227,7 @@ jobs:
               // set outputs for 
               const result = {
                 nextVersion: nextVersion,
-                commitMessage: "Version release: " + nextVersion + "
-
-            " + pr.title + "
-            " + pr.body.replaceAll("
-            ", "
-            ")
+                commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + "\n" + pr.body.replaceAll("\r\n", "\n")
               }
               return result
 
