@@ -278,8 +278,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |    commit_sha: context.sha
                              |  })
                              |
-                             |  console.log(context)
-                             |
                              |  const prs = prResponse.data
                              |
                              |  if (prs === undefined) {
