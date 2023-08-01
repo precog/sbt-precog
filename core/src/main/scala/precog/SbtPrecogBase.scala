@@ -264,8 +264,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  var patch = Number(parsedVersion[2])
                              |
                              |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                             |    // owner: context.repo.owner,
-                             |    owner: "precog",
+                             |    owner: context.repo.owner,
                              |    repo: context.repo.repo,
                              |    commit_sha: context.sha
                              |  })
