@@ -53,8 +53,10 @@ import sbt.{Logger => _, _}
 import sbtghactions.GenerativeKeys._
 import sbtghactions.GitHubActionsPlugin
 import sbtghactions.GitHubActionsPlugin.autoImport._
+import sbtghactions.JavaSpec
 import sbtghactions.Ref
 import sbtghactions.RefPredicate
+import sbtghactions.UseRef
 import sbtghactions.WorkflowJob
 import sbtghactions.WorkflowStep
 import sbttrickle.TricklePlugin
@@ -64,6 +66,11 @@ import sbttrickle.metadata.ModuleUpdateData
 abstract class SbtPrecogBase extends AutoPlugin {
   private var foundLocalEvictions: Set[(String, String)] = Set()
   val VersionsPath = ".versions.json"
+
+  val RevisionLabel = "version: revision"
+  val FeatureLabel = "version: feature"
+  val BreakingLabel = "version: breaking"
+  val ReleaseLabel = "version: release"
 
   private lazy val internalPublishAsOSSProject =
     settingKey[Boolean]("Internal proxy to lift the scoping on publishAsOSSProject")
@@ -149,7 +156,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
-      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0"),
+      githubWorkflowJavaVersions := Seq(
+        JavaSpec(JavaSpec.Distribution.Temurin, "17")
+      ),
       githubWorkflowEnv := Map(
         "SBT" -> "sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",
@@ -181,33 +190,160 @@ abstract class SbtPrecogBase extends AutoPlugin {
         RefPredicate.StartsWith(Ref.Branch("backport/v")),
         RefPredicate.Equals(Ref.Branch("main")),
         RefPredicate.Equals(Ref.Branch("master"))),
+
+      // TODO this needs to be fixed... somehow
       githubWorkflowAddedJobs += WorkflowJob(
         "auto-merge",
         "Auto Merge",
         List(
-          WorkflowStep.Checkout,
-          WorkflowStep.SetupScala,
-          WorkflowStep.Sbt(List("transferCommonResources"), name = Some("Common sbt setup")),
-          WorkflowStep.Run(
-            List(
-              "curl -L https://github.com/precog/devtools/raw/master/bin/sdmerge > /tmp/sdmerge",
-              "chmod +x /tmp/sdmerge"),
-            name = Some("Fetch the latest sdmerge")
-          ),
-          WorkflowStep.Run(
-            List(
-              "git config --global user.email \"bot@precog.com\"",
-              "git config --global user.name \"Precog Bot\"",
-              "/tmp/sdmerge $GITHUB_REPOSITORY $PR_NUMBER"),
-            name = Some("Self-merge"),
-            env = Map("PR_NUMBER" -> s"$${{ github.event.pull_request.number }}")
+          WorkflowStep.Use(
+            name = Some("Merge"),
+            id = Some("merge"),
+            ref = UseRef.Public("actions", "github-script", "v6"),
+            params = Map(
+              "script" -> s"""  octokit.rest.pulls.merge({
+                             |    context.repo.owner,
+                             |    context.repo.repo,
+                             |    $${{ github.event.pull_request.number }},
+                             |  }); """.stripMargin
+            )
           )
         ),
         cond = Some(
           "github.event_name == 'pull_request' && contains(github.head_ref, 'version-bump') && contains(github.event.pull_request.labels.*.name, 'version: revision')"),
-        needs = List("build"),
-        scalas = List(scalaVersion.value)
+        needs = List("build")
       ),
+
+      // Make sure that the right labels are applied for PRs targetting main branches
+      githubWorkflowAddedJobs += WorkflowJob(
+        "check-labels",
+        "Check Labels",
+        List(
+          WorkflowStep.Use(
+            name = Some("Check PR labels"),
+            ref = UseRef.Docker("agilepathway/pull-request-label-checker", "v1.4.30"),
+            params = Map(
+              "one_of" -> s"$BreakingLabel,$FeatureLabel,$RevisionLabel,$ReleaseLabel",
+              "none_of" -> ":stop_sign:",
+              "repo_token" -> s"$${{ env.GITHUB_TOKEN }}"
+            )
+          )
+        ),
+        cond = Some("github.event_name == 'pull_request' && !github.event.pull_request.draft")
+      ),
+
+      // Check whether we need to version bump
+      // We version bump when:
+      //    - it's a push to the main/master branch
+      //    - the push has an associated PR
+      //    - the PR has a version label attached
+      // This job outputs the new version
+      githubWorkflowAddedJobs += WorkflowJob(
+        "next-version",
+        "Next version",
+        List(
+          WorkflowStep.Checkout,
+          // Get current version
+          WorkflowStep.Run(
+            List(
+              "echo \"CURRENT_VERSION=$(cat version.sbt | awk '{ gsub(/\"/, \"\", $5); print $5 }')\" >> $GITHUB_OUTPUT"
+            ),
+            id = Some("current_version"),
+            name = Some("Get current version")
+          ),
+          // get for associated PR and construct the next versionw
+          WorkflowStep.Use(
+            name = Some("Compute next version"),
+            id = Some("compute_next_version"),
+            ref = UseRef.Public("actions", "github-script", "v6"),
+            params = Map(
+              "script" -> s"""  const currentVersion = '$${{steps.current_version.outputs.CURRENT_VERSION}}'
+                             |  const parsedVersion = currentVersion.split(".")
+                             |  var major = Number(parsedVersion[0])
+                             |  var minor = Number(parsedVersion[1])
+                             |  var patch = Number(parsedVersion[2])
+                             |
+                             |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                             |    // owner: context.repo.owner,
+                             |    owner: "precog",
+                             |    repo: context.repo.repo,
+                             |    commit_sha: context.sha
+                             |  })
+                             |
+                             |  const prs = prResponse.data
+                             |
+                             |  if (prs === undefined) {
+                             |    throw new Error("Could not fetch PRs for commit: status " + prs.status)
+                             |  } else if (prs.length > 1) {
+                             |    throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
+                             |  } else if (prs.length === 0) {
+                             |    throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
+                             |  } 
+                             |
+                             |  const pr = prs[0]
+                             |
+                             |  for (const label of pr.labels) {
+                             |     if (label.name === 'version: revision') {
+                             |        patch = patch + 1
+                             |        break
+                             |     } else if (label.name === 'version: feature') {
+                             |        patch = 0
+                             |        minor = minor + 1
+                             |        break
+                             |     } else if (label.name === 'version: breaking') {
+                             |        major = major + 1
+                             |        minor = 0
+                             |        patch = 0
+                             |        break
+                             |     } else if (label.name === 'version: release') {
+                             |        major = major + 1
+                             |        minor = 0
+                             |        patch = 0
+                             |        break
+                             |     }
+                             |  }
+                             |
+                             |  const nextVersion = major + '.' + minor + '.' + patch
+                             |   
+                             |  if (nextVersion === currentVersion) {
+                             |    throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
+                             |  }
+                             |  
+                             |  console.log("Setting the next version to " + nextVersion)
+                             |  
+                             |  // set outputs for 
+                             |  const result = {
+                             |    nextVersion: nextVersion,
+                             |    commitMessage: "Version release: " + nextVersion + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |  }
+                             |  return result""".stripMargin
+            )
+          ),
+          WorkflowStep.Run(
+            name = Some("Commit set up"),
+            id = Some("commit_set_up"),
+            commands = List(
+              s"""echo "ThisBuild / version := $$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.nextVersion')" > version.sbt""",
+              s"""echo \"COMMIT_MESSAGE=$$(echo '$${{steps.compute_next_version.outputs.result}}' | jq '.commitMessage')\" >> $$GITHUB_OUTPUT"""
+            )
+          ),
+          WorkflowStep.Use(
+            name = Some("Commit changes"),
+            ref = UseRef.Public("stefanzweifel", "git-auto-commit-action", "v4"),
+            params = Map(
+              "commit_message" -> s"$${{steps.commit_set_up.outputs.COMMIT_MESSAGE}}"
+            )
+          )
+        ),
+        // We check that it's a push. We don't need to check for whether the branch
+        // is right because the whole workflow is set to only run on either pull requests or
+        // pushes to main/master, so a check that it's a push is enough
+        cond = Some("github.event_name == 'push'")
+      ),
+      githubWorkflowPublishCond ~= { condMaybe =>
+        val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
+        condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
+      },
       githubWorkflowGeneratedCI := {
         githubWorkflowGeneratedCI.value map { job =>
           if (job.id == "build")

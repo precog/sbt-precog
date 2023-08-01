@@ -1,5 +1,5 @@
 addSbtPlugin("io.crashbox" % "sbt-gpg" % "0.2.1")
-addSbtPlugin("com.codecommit" % "sbt-github-actions" % "0.13.0")
+addSbtPlugin("com.github.sbt" % "sbt-github-actions" % "0.15.0")
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.6.0")
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.4.3")
 addSbtPlugin("com.github.cb372" % "sbt-explicit-dependencies" % "0.2.16")
