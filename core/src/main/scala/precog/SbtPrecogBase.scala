@@ -324,7 +324,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  // set outputs for 
                              |  const result = {
                              |    nextVersion: nextVersion,
-                             |    commitMessage: "Version release: " + nextVersion + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |    commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + "\n" + pr.body.replaceAll("\r\n", "\n")
                              |  }
                              |  return result""".stripMargin
             )

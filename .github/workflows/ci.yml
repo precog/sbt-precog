@@ -227,7 +227,12 @@ jobs:
               // set outputs for 
               const result = {
                 nextVersion: nextVersion,
-                commitMessage: "Version release: " + nextVersion + "\n" + pr.body.replaceAll("\r\n", "\n")
+                commitMessage: "Version release: " + nextVersion + "
+
+            " + pr.title + "
+            " + pr.body.replaceAll("
+            ", "
+            ")
               }
               return result
 
