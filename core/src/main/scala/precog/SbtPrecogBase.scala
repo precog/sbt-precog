@@ -253,7 +253,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
               "token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
             )
           ),
-          WorkflowStep.Checkout,
           // Get current version
           WorkflowStep.Run(
             List(
@@ -320,11 +319,18 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  }
                              |  
                              |  console.log("Setting the next version to " + nextVersion)
+                             | 
+                             |  var body = ""
+                             |  if (pr.body === undefined || pr.body === null || pr.body === "") {
+                             |    body = ""
+                             |  } else {
+                             |    body = "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |  }
                              |  
                              |  // set outputs for 
                              |  const result = {
                              |    nextVersion: nextVersion,
-                             |    commitMessage: "Version release: " + nextVersion + "\\n\\n" + pr.title + "\\n" + pr.body.replaceAll("\\r\\n", "\\n")
+                             |    commitMessage: "Version release: " + nextVersion + "\\n\\n" + pr.title + body
                              |  }
                              |  return result""".stripMargin
             )

@@ -159,9 +159,6 @@ jobs:
         with:
           token: ${{ secrets.PRECOG_GITHUB_TOKEN }}
 
-      - name: Checkout current branch (fast)
-        uses: actions/checkout@v3
-
       - name: Get current version
         id: current_version
         run: echo "CURRENT_VERSION=$(cat version.sbt | awk '{ gsub(/"/, "", $5); print $5 }')" >> $GITHUB_OUTPUT
@@ -224,10 +221,17 @@ jobs:
 
               console.log("Setting the next version to " + nextVersion)
 
+              var body = ""
+              if (pr.body === undefined || pr.body === null || pr.body === "") {
+                body = ""
+              } else {
+                body = "\n" + pr.body.replaceAll("\r\n", "\n")
+              }
+
               // set outputs for 
               const result = {
                 nextVersion: nextVersion,
-                commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + "\n" + pr.body.replaceAll("\r\n", "\n")
+                commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + body
               }
               return result
 
