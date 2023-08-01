@@ -206,7 +206,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |    repo: context.repo.repo,
                              |    pull_number: $${{ github.event.pull_request.number }},
                              |  }); """.stripMargin,
-              "github-token" -> "${{ secrets.PRECOG_GITHUB_TOKEN }}"
+              "github-token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
             )
           )
         ),
