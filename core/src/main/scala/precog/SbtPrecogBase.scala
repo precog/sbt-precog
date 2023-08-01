@@ -278,7 +278,9 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                              |    owner: context.repo.owner,
                              |    repo: context.repo.repo,
-                             |    commit_sha: context.sha
+                             |    // TODO restore
+                             |    // commit_sha: context.sha
+                             |    commit_sha: context.payload.after
                              |  })
                              |
                              |  const prs = prResponse.data
