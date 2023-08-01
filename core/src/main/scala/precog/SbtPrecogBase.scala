@@ -171,7 +171,6 @@ abstract class SbtPrecogBase extends AutoPlugin {
       // we don't want to redundantly build other pushed branches
       githubWorkflowTargetBranches := Seq("master", "main", "backport/v*"),
       githubWorkflowPREventTypes += sbtghactions.PREventType.ReadyForReview,
-      githubWorkflowPREventTypes += sbtghactions.PREventType.Closed,
       githubWorkflowBuildPreamble +=
         WorkflowStep.Sbt(
           List("transferCommonResources"),
