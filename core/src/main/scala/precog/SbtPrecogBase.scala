@@ -242,6 +242,17 @@ abstract class SbtPrecogBase extends AutoPlugin {
         "next-version",
         "Next version",
         List(
+          // We have to replicate the checkout step ourselves to add the token to 
+          // overcome the github limitation of commmits triggered by workflows
+          // not triggerring additional workflows
+          // https://github.com/marketplace/actions/git-auto-commit#commits-made-by-this-action-do-not-trigger-new-workflow-runs
+          WorkflowStep.Use(
+            UseRef.Public("actions", "checkout", "v3"), 
+            name = Some("Checkout current branch (fast)"),
+            params = Map(
+              "token" -> s"$${{ secrets.PRECOG_GITHUB_TOKEN }}"
+            )
+          ),
           WorkflowStep.Checkout,
           // Get current version
           WorkflowStep.Run(
