@@ -53,6 +53,7 @@ import sbt.{Logger => _, _}
 import sbtghactions.GenerativeKeys._
 import sbtghactions.GitHubActionsPlugin
 import sbtghactions.GitHubActionsPlugin.autoImport._
+import sbtghactions.JavaSpec
 import sbtghactions.Ref
 import sbtghactions.RefPredicate
 import sbtghactions.UseRef
@@ -155,7 +156,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
 
     lazy val githubActionsSettings: Seq[Def.Setting[_]] = Seq(
       githubWorkflowSbtCommand := s"$$SBT",
-      githubWorkflowJavaVersions := Seq("adopt@1.11", "graalvm-ce-java11@21.1.0"),
+      githubWorkflowJavaVersions := Seq(
+        JavaSpec(JavaSpec.Distribution.Adopt, "1.11"),
+        JavaSpec.graalvm("ce-java11", "21.1.0")
+      ),
       githubWorkflowEnv := Map(
         "SBT" -> "sbt",
         "REPO_SLUG" -> s"$${{ github.repository }}",

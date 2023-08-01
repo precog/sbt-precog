@@ -20,7 +20,6 @@ import scala.collection.immutable.Seq
 
 import sbt.Keys._
 import sbt._
-import sbtghactions.GenerativeKeys.githubWorkflowDependencyPatterns
 import sbtghpackages.GitHubPackagesPlugin
 
 object SbtPrecog extends SbtPrecogBase {
@@ -34,9 +33,6 @@ object SbtPrecog extends SbtPrecogBase {
   }
 
   import GitHubPackagesPlugin.autoImport._
-
-  override def buildSettings =
-    super.buildSettings ++ Seq(githubWorkflowDependencyPatterns += ".versions.json")
 
   override def projectSettings =
     super.projectSettings ++
