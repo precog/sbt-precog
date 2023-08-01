@@ -181,8 +181,6 @@ jobs:
                 commit_sha: context.sha
               })
 
-              console.log(context)
-
               const prs = prResponse.data
 
               if (prs === undefined) {
