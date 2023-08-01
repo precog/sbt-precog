@@ -273,14 +273,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
                              |  var minor = Number(parsedVersion[1])
                              |  var patch = Number(parsedVersion[2])
                              |
-                             |  console.log(context)
-                             |
                              |  const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                              |    owner: context.repo.owner,
                              |    repo: context.repo.repo,
-                             |    // TODO restore
-                             |    // commit_sha: context.sha
-                             |    commit_sha: context.payload.after
+                             |    commit_sha: context.sha
                              |  })
                              |
                              |  const prs = prResponse.data
@@ -362,8 +358,8 @@ abstract class SbtPrecogBase extends AutoPlugin {
         //
         // Also, don't trigger a version bump on version bump commits or else we'll
         // just infinitely bump
-        // cond = Some(
-        //   "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
+        cond = Some(
+          "github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
         val extraCondition = """startsWith(github.commits[0].message, 'Version release')"""
