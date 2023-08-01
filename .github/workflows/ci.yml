@@ -146,6 +146,7 @@ jobs:
 
   next-version:
     name: Next version
+    if: github.event_name == 'push' && !startsWith(github.commits[0].message, 'Version release')
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -153,102 +154,96 @@ jobs:
         java: [temurin@8]
     runs-on: ${{ matrix.os }}
     steps:
-      # - name: Checkout current branch (fast)
-      #   uses: actions/checkout@v3
-      #   with:
-      #     token: ${{ secrets.PRECOG_GITHUB_TOKEN }}
-      - name: Four
-        run: echo "${{startsWith(github.event.head_commit.message, 'test')}}"
-      - name: Three
-        run: echo "${{github.event.head_commit.message}}"
-      - name: Two
-        run: echo "${{toJson(github.event.head_commit)}}"
-      - name: One
-        run: echo "${{toJson(github.event.commits)}}"
+      - name: Checkout current branch (fast)
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PRECOG_GITHUB_TOKEN }}
 
-      # - name: Get current version
-      #   id: current_version
-      #   run: echo "CURRENT_VERSION=$(cat version.sbt | awk '{ gsub(/"/, "", $5); print $5 }')" >> $GITHUB_OUTPUT
+      - name: Get current version
+        id: current_version
+        run: echo "CURRENT_VERSION=$(cat version.sbt | awk '{ gsub(/"/, "", $5); print $5 }')" >> $GITHUB_OUTPUT
 
-      # - name: Compute next version
-      #   id: compute_next_version
-      #   uses: actions/github-script@v6
-      #   with:
-      #     script: |
-      #         const currentVersion = '${{steps.current_version.outputs.CURRENT_VERSION}}'
-      #         const parsedVersion = currentVersion.split(".")
-      #         var major = Number(parsedVersion[0])
-      #         var minor = Number(parsedVersion[1])
-      #         var patch = Number(parsedVersion[2])
+      - name: Compute next version
+        id: compute_next_version
+        uses: actions/github-script@v6
+        with:
+          script: |
+              const currentVersion = '${{steps.current_version.outputs.CURRENT_VERSION}}'
+              const parsedVersion = currentVersion.split(".")
+              var major = Number(parsedVersion[0])
+              var minor = Number(parsedVersion[1])
+              var patch = Number(parsedVersion[2])
 
-      #         const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-      #           owner: context.repo.owner,
-      #           repo: context.repo.repo,
-      #           commit_sha: context.sha
-      #         })
+              const prResponse = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha
+              })
 
-      #         const prs = prResponse.data
+              const prs = prResponse.data
 
-      #         if (prs === undefined) {
-      #           throw new Error("Could not fetch PRs for commit: status " + prs.status)
-      #         } else if (prs.length > 1) {
-      #           throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
-      #         } else if (prs.length === 0) {
-      #           throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
-      #         } 
+              console.log(context)
 
-      #         const pr = prs[0]
+              if (prs === undefined) {
+                throw new Error("Could not fetch PRs for commit: status " + prs.status)
+              } else if (prs.length > 1) {
+                throw new Error("Cannot determine version increment required as there is more than one PR associated with the commit: " + context.sha)
+              } else if (prs.length === 0) {
+                throw new Error("Cannot determine version increment required as there are no PRs associated with the commit: " + context.sha)
+              } 
 
-      #         for (const label of pr.labels) {
-      #            if (label.name === 'version: revision') {
-      #               patch = patch + 1
-      #               break
-      #            } else if (label.name === 'version: feature') {
-      #               patch = 0
-      #               minor = minor + 1
-      #               break
-      #            } else if (label.name === 'version: breaking') {
-      #               major = major + 1
-      #               minor = 0
-      #               patch = 0
-      #               break
-      #            } else if (label.name === 'version: release') {
-      #               major = major + 1
-      #               minor = 0
-      #               patch = 0
-      #               break
-      #            }
-      #         }
+              const pr = prs[0]
 
-      #         const nextVersion = major + '.' + minor + '.' + patch
+              for (const label of pr.labels) {
+                 if (label.name === 'version: revision') {
+                    patch = patch + 1
+                    break
+                 } else if (label.name === 'version: feature') {
+                    patch = 0
+                    minor = minor + 1
+                    break
+                 } else if (label.name === 'version: breaking') {
+                    major = major + 1
+                    minor = 0
+                    patch = 0
+                    break
+                 } else if (label.name === 'version: release') {
+                    major = major + 1
+                    minor = 0
+                    patch = 0
+                    break
+                 }
+              }
 
-      #         if (nextVersion === currentVersion) {
-      #           throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
-      #         }
+              const nextVersion = major + '.' + minor + '.' + patch
 
-      #         console.log("Setting the next version to " + nextVersion)
+              if (nextVersion === currentVersion) {
+                throw new Error("Could not detect the version label on PR " + pr.number + " (obtained via association to commit " + context.sha + ")")
+              }
 
-      #         var body = ""
-      #         if (pr.body === undefined || pr.body === null || pr.body === "") {
-      #           body = ""
-      #         } else {
-      #           body = "\n" + pr.body.replaceAll("\r\n", "\n")
-      #         }
+              console.log("Setting the next version to " + nextVersion)
 
-      #         // set outputs for 
-      #         const result = {
-      #           nextVersion: nextVersion,
-      #           commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + body
-      #         }
-      #         return result
+              var body = ""
+              if (pr.body === undefined || pr.body === null || pr.body === "") {
+                body = ""
+              } else {
+                body = "\n" + pr.body.replaceAll("\r\n", "\n")
+              }
 
-      # - name: Modify version
-      #   id: modify_version
-      #   run: 'echo ''ThisBuild / version := "${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"'' > version.sbt'
+              // set outputs for 
+              const result = {
+                nextVersion: nextVersion,
+                commitMessage: "Version release: " + nextVersion + "\n\n" + pr.title + body
+              }
+              return result
 
-      # - name: Commit changes
-      #   uses: stefanzweifel/git-auto-commit-action@v4
-      #   with:
-      #     commit_message: ${{fromJson(steps.compute_next_version.outputs.result).commitMessage}}
-      #     commit_user_name: precog-bot
-      #     commit_user_email: bot@precog.com
+      - name: Modify version
+        id: modify_version
+        run: 'echo ''ThisBuild / version := "${{fromJson(steps.compute_next_version.outputs.result).nextVersion}}"'' > version.sbt'
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: ${{fromJson(steps.compute_next_version.outputs.result).commitMessage}}
+          commit_user_name: precog-bot
+          commit_user_email: bot@precog.com
