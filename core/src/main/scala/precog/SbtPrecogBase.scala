@@ -361,10 +361,10 @@ abstract class SbtPrecogBase extends AutoPlugin {
         // Also, don't trigger a version bump on version bump commits or else we'll
         // just infinitely bump
         cond = Some(
-          "github.event_name == 'push' && !startsWith(github.head_commit.message, 'Version release')")
+          "github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'Version release')")
       ),
       githubWorkflowPublishCond ~= { condMaybe =>
-        val extraCondition = """startsWith(github.head_commit.message, 'Version release')"""
+        val extraCondition = """startsWith(github.event.head_commit.message, 'Version release')"""
         condMaybe.map(cond => s"$cond && $extraCondition").orElse(Some(extraCondition))
       },
       githubWorkflowGeneratedCI := {
@@ -378,7 +378,7 @@ abstract class SbtPrecogBase extends AutoPlugin {
               //
               // I.e. if a push was made to main/master and it isn't a `Version release` - don't run
               val dontRunBeforeVersionBump =
-                "!(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && !startsWith(github.head_commit.message, 'Version release'))"
+                "!(github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && !startsWith(github.event.head_commit.message, 'Version release'))"
               Some(s"$dontRunOnDraftPRs && $dontRunBeforeVersionBump")
             })
           else

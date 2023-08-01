@@ -24,7 +24,7 @@ env:
 jobs:
   build:
     name: Build and Test
-    if: '!(github.event_name == ''pull_request'' && github.event.pull_request.draft) && !(github.event_name == ''push'' && (github.ref == ''refs/heads/main'' || github.ref == ''refs/heads/master'') && !startsWith(github.head_commit.message, ''Version release''))'
+    if: '!(github.event_name == ''pull_request'' && github.event.pull_request.draft) && !(github.event_name == ''push'' && (github.ref == ''refs/heads/main'' || github.ref == ''refs/heads/master'') && !startsWith(github.event.head_commit.message, ''Version release''))'
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -66,7 +66,7 @@ jobs:
   publish:
     name: Publish Artifacts
     needs: [build]
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/backport/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && (startsWith(github.head_commit.message, 'Version release'))
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/backport/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && (startsWith(github.event.head_commit.message, 'Version release'))
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -146,7 +146,7 @@ jobs:
 
   next-version:
     name: Next version
-    if: github.event_name == 'push' && !startsWith(github.head_commit.message, 'Version release')
+    if: github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'Version release')
     strategy:
       matrix:
         os: [ubuntu-latest]
